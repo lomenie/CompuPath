@@ -1,0 +1,194 @@
+#include <opencv2/opencv.hpp>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <cmath>
+using namespace cv;
+using namespace std;
+
+int main(int argc, char** argv)
+{
+ char* imageName = argv[1];
+ Mat image, imageMarron, imageC1, imageC2, imageC3, imageH, imageDAB, imageE;
+ image = imread( imageName, 1 );
+ IplImage* image2 = cvLoadImage(imageName,1);
+ int i,j;
+ double maxM,minM,maxC1,minC1,maxC2,minC2,maxC3,minC3,maxH,minH,maxD,minD,maxE,minE,tampon,valeur;
+ valeur = 0;
+ vector<vector<double> > tab_cellule;
+
+ if( argc != 2 || !image.data )
+ {
+   printf( " No image data \n " );
+   return -1;
+ }
+
+ cvtColor( image, imageMarron, CV_BGR2GRAY );
+ cvtColor( image, imageC1, CV_BGR2GRAY );
+ cvtColor( image, imageC2, CV_BGR2GRAY );
+ cvtColor( image, imageC3, CV_BGR2GRAY );
+ cvtColor( image, imageH, CV_BGR2GRAY );
+ cvtColor( image, imageDAB, CV_BGR2GRAY );
+ cvtColor( image, imageE, CV_BGR2GRAY );
+
+
+ double a;
+ CvScalar pixel;
+ //initialiser Min et Max par les valeurs du pixel (0,0)
+ pixel=cvGet2D(image2,0,0);
+ maxM = pixel.val[0]-0.3*(pixel.val[2]+pixel.val[1]); minM = maxM;// marron Ruifrok [1997]
+ maxC1 = atan(pixel.val[2]/max(pixel.val[1],pixel.val[0]));minC1 = maxC1;// invariant Grevers et Smeulders [1999]
+ maxC2 = atan(pixel.val[1]/max(pixel.val[2],pixel.val[0]));minC2 = maxC2;//invariant Grevers et Smeulders [1999]
+ maxC3 = atan(pixel.val[0]/max(pixel.val[2],pixel.val[1]));minC3 = maxC3;//invariant Grevers et Smeulders [1999]
+ a = maxC3;
+ if (a==0)
+ {
+	 a=0.0001;
+ }
+ maxH = pixel.val[2]/a;minH = maxH;// hématoxyline Maya [2013]
+ maxD = pow(pixel.val[0],2)/pixel.val[2];minD = maxD;// DAB Maya [2013]
+ maxE = pixel.val[1]/pixel.val[2];minE = maxE;// éosine Maya [2013]
+
+ //recuperer des min et max dans l'image pour normalisation
+ for ( i=0; i<image.rows; i++)
+ {
+	 for ( j=0; j<image.cols; j++)
+	 {
+		 pixel=cvGet2D(image2,i,j);
+
+		 tampon = pixel.val[0]-0.3*(pixel.val[2]+pixel.val[1]);
+
+		 	 if (tampon>maxM)
+		 	 {
+		 		 maxM = tampon;
+		 	 }
+		 	 if (tampon<minM)
+		 	 {
+		 		 minM = tampon;
+		 	 }
+		 tampon = atan(pixel.val[2]/max(pixel.val[1],pixel.val[0]));
+		 	 if (tampon>maxC1)
+		 	 {
+		 		 maxC1 = tampon;
+		 	 }
+		 	 if (tampon<minC1)
+		 	 {
+		 		 minC1 = tampon;
+		 	 }
+		 tampon = atan(pixel.val[1]/max(pixel.val[2],pixel.val[0]));
+		 	 if (tampon>maxC2)
+		 	 {
+		 		 maxC2 = tampon;
+		 	 }
+		 	 if (tampon<minC2)
+		 	 {
+		 		 minC2 = tampon;
+		 	 }
+		 tampon = atan(pixel.val[0]/max(pixel.val[2],pixel.val[1]));
+		 	 if (tampon>maxC3)
+		 	 {
+		 		 maxC3 = tampon;
+		 	 }
+		 	 if(tampon<minC3)
+		 	 {
+		 		 minC3 = tampon;
+		 	 }
+
+		 	 a = tampon;//la valeur précedente de tampon
+		 	 if (a==0)
+		 	 {
+		 		a=0.0001;
+		 	 }
+		 tampon = pixel.val[2]/a;
+		 	 if (tampon>maxH)
+		 	 {
+		 		 maxH = tampon;
+		 	 }
+		 	 if (tampon<minH)
+		 	 {
+		 		 minH = tampon;
+		 	 }
+		 tampon = pow(pixel.val[0],2)/pixel.val[2];
+		 	 if (tampon>maxD)
+		 	 {
+		 		 maxD = tampon;
+		 	 }
+		 	 if (tampon<minD)
+		 	 {
+		 		 minD = tampon;
+		 	 }
+
+		 tampon = pixel.val[1]/pixel.val[2];
+		 	 if (tampon>maxE)
+		 	 {
+		 		 maxE = tampon;
+		 	 }
+		 	 if (tampon<minE)
+		 	 {
+		 		 minE = tampon;
+		 	 }
+
+
+	 }
+ }
+
+// calcule des valeurs normalisées
+
+ for ( i=0; i<image.rows; i++)
+  {
+ 	 for ( j=0; j<image.cols; j++)
+ 	 {
+ 		 pixel=cvGet2D(image2,i,j);
+
+ 		 tampon = pixel.val[0]-0.3*(pixel.val[2]+pixel.val[1]);
+ 		 	 imageMarron.at<uchar>(i,j) = 255*(tampon-minM)/(maxM-minM);
+ 		 tampon = atan(pixel.val[2]/max(pixel.val[1],pixel.val[0]));
+ 		 	 imageC1.at<uchar>(i,j) = 255*(tampon-minC1)/(maxC1-minC1);
+ 		 tampon = atan(pixel.val[1]/max(pixel.val[2],pixel.val[0]));
+ 		 	 imageC2.at<uchar>(i,j) = 255*(tampon-minC2)/(maxC2-minC2);
+ 		 tampon = atan(pixel.val[0]/max(pixel.val[2],pixel.val[1]));
+ 		 	 imageC3.at<uchar>(i,j) = 255*(tampon-minC3)/(maxC3-minC3);
+
+ 		 a = tampon;//la valeur précedente de tampon
+ 		  	 if (a==0)
+ 		  	 {
+ 		  		a=0.0001;
+ 		  	 }
+ 		 tampon = pixel.val[2]/a;//valeur précédante de tampon
+ 		 	 imageH.at<uchar>(i,j) = 255*(tampon-minH)/(maxH-minH);
+ 		 tampon = pow(pixel.val[0],2)/pixel.val[2];
+ 		 	 imageDAB.at<uchar>(i,j) = 255*(tampon-minD)/(maxD-minD);
+ 		 tampon = pixel.val[1]/pixel.val[2];
+ 		 	 imageE.at<uchar>(i,j) = 255*(tampon-minE)/(maxE-minE);
+
+ 	 }
+  }
+
+ imshow( "Marron", imageMarron );
+ imwrite( "Marron.jpg", imageMarron );
+
+ imshow( "C1", imageC1);
+ imwrite( "C1.jpg", imageC1 );
+
+ imshow( "C2", imageC2 );
+ imwrite( "C2.jpg", imageC2 );
+
+ imshow( "C3", imageC3 );
+ imwrite( "C3.jpg", imageC3);
+
+ imshow( "Hématoxyline", imageH );
+ imwrite( "Hématoxyline.jpg", imageH );
+
+ imshow( "DAB", imageDAB );
+ imwrite( "dab.jpg", imageDAB );
+
+
+ imshow( "Eosine", imageE );
+ imwrite( "Eosine.jpg", imageE);
+
+ imshow( "image originale", image);
+ imwrite( "Image_Originale.jpg", image );
+
+ waitKey(0);
+ return 0;
+}
