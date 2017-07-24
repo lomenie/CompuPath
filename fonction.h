@@ -19,6 +19,7 @@ class Fenetre : public QWidget
 public:
     Fenetre();
     static void mouseEvent(int evt, int x, int y, int flags, void* param);
+    static void mouseAnnotation(int evt, int x, int y, int flags, void* param);
  //   static void fonctionNicolas();
     static void fonctionNicolasArmand();
     static void fonctionCarron();
@@ -32,7 +33,11 @@ public slots:
     void selectionPixel();
     void selectionMarqueur();
     void Traitement();
-    void imageCytomine();
+    void Annotation();
+    void imageCytomineA1();
+    void imageCytomineA2();
+    void imageCytomineA3();
+    void imageCytomineA4();
 //    void seuillage(bool cocher);
 //    void seuillage(int seuil);
     void seuillage();
@@ -50,6 +55,9 @@ private:
     QPushButton *bouton5;
     QPushButton *bouton6;
     QPushButton *bouton7;
+    QPushButton *bouton8;
+    QPushButton *bouton9;
+    QPushButton *bouton10;
     QLCDNumber  *lcd;
     QLCDNumber  *lcd1;
     QLCDNumber  *lcd2;
