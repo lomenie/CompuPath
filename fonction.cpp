@@ -1,12 +1,19 @@
 #include "fonction.h"
 #include <QTextStream>
 double Teinte = 0;double Luminance = 0;double Saturation = 0;double Rouge = 0;double Vert = 0;double Bleu = 0;
-Mat image,imageC1,imageC2;
+
+Mat image,imageC1,imageC2,imageC3,imageInt, imageExt,imageZone;
 string fichierstd;
 bool traitement = false;
 int nbCourbe = 0;
+double DiametreCellule = 15.;
+double diametrePixel = 0.2325;
 vector<vector<int> > TabCourbeMoy;
-vector<vector<int> > TabCourbeMoy2;
+vector<vector<int> > contour;
+//int contourMinx,contourMiny,contourMaxx,contourMaxy;
+int distanceExtFront=10;//distance pixels minimum entre le front et le bord de l'image
+int bandelette = 5;//taille bandelettes de 5 micro
+int nb=0;
 
 
 Fenetre::Fenetre() : QWidget()
@@ -52,11 +59,31 @@ Fenetre::Fenetre() : QWidget()
     bouton6->setFont(QFont("Comic Sans MS", 8, QFont::Bold, true));
     bouton6->setCursor(Qt::PointingHandCursor);
     //bouton7
-    bouton7 = new QPushButton("Cytomine", this);
-    bouton7->setGeometry(750, 260, 110, 30);
+
+    bouton7 = new QPushButton("Cytomine Patchs", this);
+    bouton7->setGeometry(100, 660, 120, 30);
     bouton7->setToolTip("Texte d'aide");
     bouton7->setFont(QFont("Comic Sans MS", 8, QFont::Bold, true));
     bouton7->setCursor(Qt::PointingHandCursor);
+    //bouton8
+    bouton8 = new QPushButton("Cytomine Front", this);
+    bouton8->setGeometry(250, 660, 120, 30);
+    bouton8->setToolTip("Texte d'aide");
+    bouton8->setFont(QFont("Comic Sans MS", 8, QFont::Bold, true));
+    bouton8->setCursor(Qt::PointingHandCursor);
+    //bouton9
+    bouton9 = new QPushButton("Analyse Image", this);
+    bouton9->setGeometry(400, 660, 120, 30);
+    bouton9->setToolTip("Texte d'aide");
+    bouton9->setFont(QFont("Comic Sans MS", 8, QFont::Bold, true));
+    bouton9->setCursor(Qt::PointingHandCursor);
+    //bouton10
+    bouton10 = new QPushButton("AnnotationFront", this);
+    bouton10->setGeometry(670, 260, 110, 30);
+    bouton10->setToolTip("Texte d'aide");
+    bouton10->setFont(QFont("Comic Sans MS", 8, QFont::Bold, true));
+    bouton10->setCursor(Qt::PointingHandCursor);
+
 
     lcd = new QLCDNumber(this);
     lcd->setSegmentStyle(QLCDNumber::Flat);
@@ -136,15 +163,22 @@ Fenetre::Fenetre() : QWidget()
     onglets->addTab(page1, "Image Originale");
     onglets->addTab(page2, "Transformation Couleur");
     onglets->addTab(page3, "Objets Biologiques");
-    onglets->addTab(page4, "Courbe");
-    onglets->addTab(page6, "Courbe Lissée");
+
+    onglets->addTab(page4, "Image Bandelettes");
+    onglets->addTab(page6, "Courbe");
+
     /////////////////////////////////////////////////////////////////////////
 
     QObject::connect(bouton3, SIGNAL(clicked()), qApp, SLOT(quit()));
     QObject::connect(bouton4, SIGNAL(clicked()), this, SLOT(ouvrirDialogueChoisir()));
     QObject::connect(bouton5, SIGNAL(clicked()), this, SLOT(selectionPixel()));
+    QObject::connect(bouton10, SIGNAL(clicked()), this, SLOT(Annotation()));
     QObject::connect(bouton6, SIGNAL(clicked()), this, SLOT(selectionMarqueur()));
-    QObject::connect(bouton7, SIGNAL(clicked()), this, SLOT(imageCytomine()));
+
+    QObject::connect(bouton7, SIGNAL(clicked()), this, SLOT(imageCytomineA1()));
+    QObject::connect(bouton8, SIGNAL(clicked()), this, SLOT(imageCytomineA2()));
+    QObject::connect(bouton9, SIGNAL(clicked()), this, SLOT(imageCytomineA3()));
+
     QObject::connect(slider, SIGNAL(valueChanged(int)), lcd,SLOT(display(int)));
     QObject::connect(bouton2, SIGNAL(clicked()), this,SLOT(courbes()));
     QObject::connect(bouton1, SIGNAL(clicked()), this,SLOT(seuillage()));
@@ -153,28 +187,28 @@ Fenetre::Fenetre() : QWidget()
 }
 //////////////////////////////////////////
 //////////////////////////////////////////
-void Fenetre::imageCytomine()
+
+
+void Fenetre::imageCytomineA1()
 {
     string ligne,mot;
     double coord;//recupère les coordonnées annotation
-    int taille,i,term; int premier = 0;
+    int taille,i,j,term; int premier = 0;
     bool ok;
     double demipatch;// = 3040/2; //longueur patch 1mm = 3040 pixels
     int TermFront = 4903197;//2 recherche par Term
-    vector<vector<double> > TabImage;//1 tableau des coordonnées du polygone image
+    int TermZone = 3478753;
+   // vector<vector<double> > TabImage;//1 tableau des coordonnées du polygone image
+   // vector<vector<double> > TabZone;// tableau des coordonnées de la Zone à analyser
 
   int idImage = QInputDialog::getInt(this,tr("Integer"),tr("Entrer Id Image :"),3452832,0,100000000,1,&ok );
   string idimage = "python /home/djiro/spyder/djiro/client/examples/get_Front_Cord.py "+to_string(idImage);
-  system(idimage.c_str());
+  system(idimage.c_str()); int MinX,MaxX,MinY,MaxY;
 
- // system("python /home/djiro/spyder/djiro/client/examples/get_Front_Cord.py");
   ifstream fichier("/home/djiro/annotations/fichier.txt");//où le fichier texte est enregistré
 
        if(fichier)
        {
-            int value = QInputDialog::getInt(this,tr("Integer"),tr("Entrer longueur patch en µm:"),1000,5,4000,1,&ok );
-            demipatch = value*3040/2000;//calcule la demilongueur du patch
-
             while(getline(fichier, ligne))
             { //traiter le texte; supprimer ,()[]
                 ofstream fichier1("/home/djiro/annotations/fichier1.txt");
@@ -200,6 +234,866 @@ void Fenetre::imageCytomine()
                     //remplir tableau des coordonnées image
                     taille=0;
 
+                    vector<vector<double> > TabImage;//1 tableau des coordonnées du polygone image
+                    while(fichier2 >> coord)
+                      {
+
+                        TabImage.push_back(vector<double>(2));
+                        TabImage[taille][0]=coord;
+
+                        fichier2 >> coord;
+                        TabImage[taille][1]=coord;
+
+                        taille+=1;
+                      }
+                    fichier2.close();
+
+                    /////////////////////////
+                    idimage = "python /home/djiro/spyder/djiro/client/examples/get_Zone_Cord.py "+to_string(idImage);
+                    system(idimage.c_str());
+                    ifstream fich("/home/djiro/annotations/fich.txt");
+                    while(getline(fich, ligne))
+                    {
+                        ofstream fich1("/home/djiro/annotations/fichier1.txt");
+                        for ( i = 0; i<ligne.size();i++)
+                        {
+                            if(ligne[i] ==','||ligne[i]=='('||ligne[i]==')'||ligne[i]=='['||ligne[i]==']')
+                                ligne[i]=' ';
+                        }
+                        //cout << ligne << endl;
+                        fich1 <<ligne;
+                        fich1.close();
+                        //retrouver les coordonnées du polygone image selectionné dans le texte
+                        ifstream fich2("/home/djiro/annotations/fichier1.txt");
+                        fich2 >> mot;//1,2
+                        fich2 >> term;//2
+                        if (term == TermZone)//2 Recherche par Term
+                        {
+                            //fichier2 >> mot;//1
+                            fich2 >> mot;//recupère le mot polygon
+                            //remplir tableau des coordonnées image
+                            taille=0;
+
+                            vector<vector<double> > TabZone;// tableau des coordonnées de la Zone à analyser
+                            while(fich2 >> coord)
+                              {
+
+                                TabZone.push_back(vector<double>(2));
+                                TabZone[taille][0]=coord;
+
+                                fich2 >> coord;
+                                TabZone[taille][1]=coord;
+
+                                taille+=1;
+                              }
+                            fich2.close();
+
+                            //rechercher les 4 points min et max de la Zone d'interet pour determiner sa boite englobante
+                            MinX = TabZone[TabZone.size()-1][0];
+                            MaxX = TabZone[TabZone.size()-1][0];
+                            MinY = TabZone[TabZone.size()-1][1];
+                            MaxY = TabZone[TabZone.size()-1][1];
+
+                            for (i=0;i<TabZone.size(); i++)
+                            {
+                                if (TabZone[i][0]<MinX)
+                                {
+                                    MinX = TabZone[i][0];
+                                }
+                                if (TabZone[i][0]>MaxX)
+                                {
+                                    MaxX = TabZone[i][0];
+                                }
+                                if (TabZone[i][1]<MinY)
+                                {
+                                    MinY = TabZone[i][1];
+                                }
+                                if (TabZone[i][1]>MaxY)
+                                {
+                                    MaxY = TabZone[i][1];
+                                }
+                            }
+
+                            int nbcolonne = MaxX - MinX;
+                            int nbligne = MaxY - MinY;
+
+                            // Creer le boite englobante de l'annotation front tumorale
+                            cout << "création image boite englobante " <<endl;
+                            Mat imageboiteRGB(nbligne, nbcolonne, CV_8UC3);
+
+                            int X1,Y1,X2,Y2,X3,Y3,X4,Y4;
+                            Mat images;
+
+                            for (i=0;i<nbligne; i+=3040)
+                            {
+                                for (j=0;j<nbcolonne; j+=3040)
+                                {
+                                    /*
+                                    idimage = "python /home/djiro/spyder/djiro/client/examples/delete_annotations.py "+to_string(idImage);
+                                    system(idimage.c_str());*/
+
+
+                                    X1 = j+MinX;X4 = X1; X2 = X1+3040;
+                                    if (X2>MaxX)
+                                    {
+                                        X2 = MaxX;
+                                    }
+                                    X3 = X2;
+
+                                    Y1 = MaxY-i; Y2=Y1; Y4=Y1-3040;
+                                    if (Y4<MinY)
+                                    {
+                                        Y4 = MinY;
+                                    }
+                                    Y3 = Y4;
+                                    string commande = "python /home/djiro/spyder/djiro/client/examples/create_annotation.py "+to_string(idImage)+" "+to_string(X1)+" "+to_string(Y1)+" "+to_string(X2)+" "+to_string(Y2)+" "+to_string(X3)+" "+to_string(Y3)+" "+to_string(X4)+" "+to_string(Y4);
+                                    system(commande.c_str());
+
+                                    idimage = "python /home/djiro/spyder/djiro/client/examples/get_annotations.py "+to_string(idImage);
+                                    system(idimage.c_str());
+
+                                    //lire l'image
+
+                                    ifstream fichiers("/home/djiro/annotations/fichier.txt");
+                                    fichiers >> mot;
+                                    fichierstd= "/home/djiro/annotations/3478753/"+mot+".png";//1 Recherche par Nom
+                                    images = imread(fichierstd);
+
+                                    for (int n=0;n<images.rows; n++)
+                                    {
+                                        for (int m=0;m<images.cols;m++)
+                                        {
+                                            ////////////////////////////////////
+                                            Vec3b rgb=images.at<Vec3b>(n,m);
+                                            imageboiteRGB.at<Vec3b>(n+i,m+j)=rgb;
+                                            ////////////////////////////////////////
+                                        }
+                                    }
+
+
+                                }
+
+                            }
+
+                            idimage = "rm -r /home/djiro/annotations/3478753";
+                            system(idimage.c_str());
+                            images.release();
+
+                            imwrite("/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageOrig1.bmp",imageboiteRGB);
+                            imageboiteRGB.release();
+
+                        //nouveaux coordonnées sur petite image des points du polygone
+
+                             for (i=0;i<TabImage.size(); i++)
+                             {
+                                 TabImage[i][0] = TabImage[i][0]-MinX;
+                                 TabImage[i][1] = MaxY-TabImage[i][1];
+                             }
+                       //nouveaux coordonnées sur petite image des points de la Zone d'interet
+
+                             for (i=0;i<TabZone.size(); i++)
+                             {
+                                 TabZone[i][0] = TabZone[i][0]-MinX;
+                                 TabZone[i][1] = MaxY-TabZone[i][1];
+                             }
+
+                             /////////////////////////////////////
+                             /////////////////////////////////////
+
+                             fichierstd= "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageOrig1.bmp";
+                             nomFichier = QString::fromStdString(fichierstd);
+
+                             image = imread(fichierstd);
+
+                                 page1->setPixmap(QPixmap(fichierstd.c_str()));
+                                // page1->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/imageOrig.bmp"));
+                                 page1->setScaledContents(true);
+                                 page1->adjustSize();
+
+                                 page2->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page2->setScaledContents(true);
+                                 page2->adjustSize();
+
+                                 page3->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page3->setScaledContents(true);
+                                 page3->adjustSize();
+
+                                 page4->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page4->setScaledContents(true);
+                                 page4->adjustSize();
+
+                                 page6->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page6->setScaledContents(true);
+                                 page6->adjustSize();
+
+
+                                 if (premier == 0)
+                                 {
+                                     QStringList items;
+                                     items << "Rouge" << "Jaune" << "Vert" << "Cyan"<< "Bleu"<< "Magenta";
+                                     marqueur = QInputDialog::getItem(this, "Seletion de Marqueur","Marqueurs:", items, 0, false, &ok);
+
+                                     premier = 1;
+                                 }
+
+                                 cout << " ---> Traitement image déconvolution " <<endl;
+
+                              //   selectionMarqueur();
+                                 Traitement();
+
+                                 ///////////////////////////////
+                                 //////////////////////////////
+
+                                 cout << " ---> Traitement: Transformée de distance " <<endl;
+                                 //Distances
+                                 if (traitement == true)
+                                 {
+                                     //calcule des distances
+                                 //    fichierstd= "/home/djiro/build-Qt_teste-Sans_nom-Debug/imageOrig1.bmp";
+                                 //    nomFichier = QString::fromStdString(fichierstd);
+                                         image = imread(fichierstd);
+                                         CvScalar pixel; pixel.val[0]=0;pixel.val[1]=255;pixel.val[2]=0;
+
+                                     //tranformé de distance
+                                     seuillage();
+                                     nbCourbe += 1;
+                                     vector<vector<int> > TabCourbe1;TabCourbe1.push_back(vector<int>(4));TabCourbe1[0][0]=0;TabCourbe1[0][1]=0;TabCourbe1[0][2]=0;TabCourbe1[0][3]=0;
+                                     int nbPixelMax = 0;
+                                     //recuperer le nombre de pixels du marqueur par bandelette de 5um(15pixels)car 1mm = 3040pixels
+                             //        int TabTaille = floor(demipatch*2/15.197)+1;
+                                     int Xcourbe = -floor(demipatch/15.197)*5;//première valeur x de la courbe
+                                    // int TabCourbe [TabTaille][3];
+                                     //initialisation
+/*
+                                     for (int i=0; i<TabTaille; i++)
+                                     {
+                                         TabCourbe[i][0]=Xcourbe;
+                                         TabCourbe[i][1]=0;
+                                         TabCourbe[i][2]=0;
+                                         Xcourbe += 5;
+                                     }*/
+
+                                     for (int i=0; i<imageInt.rows; i++)
+                                     {
+                                          for (int j=0; j<imageInt.cols; j++)
+                                          {
+                                          int intersect = 0;
+                                          for (int k=0; k<TabImage.size()-1;k++)
+                                          {
+                                              double ordonn;
+                                              double coefdir;
+                                              if ((TabImage[k][0]-TabImage[k+1][0]) == 0)
+                                              {
+                                                  if(i< max(TabImage[k][1],TabImage[k+1][1]) && i>=min(TabImage[k][1],TabImage[k+1][1]) && j<=TabImage[k][0])
+                                                  {
+                                                      intersect += 1;
+                                                  }
+                                              }
+                                             else if(i< max(TabImage[k][1],TabImage[k+1][1]) && i>=min(TabImage[k][1],TabImage[k+1][1]))
+                                              {
+                                                  coefdir = (TabImage[k][1]-TabImage[k+1][1])/(TabImage[k][0]-TabImage[k+1][0]);
+                                                  ordonn = TabImage[k][1]-(coefdir*TabImage[k][0]);
+                                                  double x = (i-ordonn)/coefdir;
+
+                                                  if (x>=j)
+                                                  {
+                                                      intersect += 1;
+                                                  }
+                                              }
+                                          }
+
+                                          if ((intersect % 2) == 1)
+                                          {
+                                              imageInt.at<uchar>(i,j)=255;
+                                              imageExt.at<uchar>(i,j)= 0;
+                                          }
+
+                                          if ((intersect % 2) == 0)
+                                        //  else
+                                          {
+                                              imageInt.at<uchar>(i,j)=0;
+                                              imageExt.at<uchar>(i,j)=255;
+                                          }
+
+                                          intersect = 0;
+                                          for (int k=0; k<TabZone.size()-1;k++)
+                                          {
+                                              double ordonn;
+                                              double coefdir;
+                                              if ((TabZone[k][0]-TabZone[k+1][0]) == 0)
+                                              {
+                                                  if(i< max(TabZone[k][1],TabZone[k+1][1]) && i>=min(TabZone[k][1],TabZone[k+1][1]) && j<=TabZone[k][0])
+                                                  {
+                                                      intersect += 1;
+                                                  }
+                                              }
+                                             else if(i< max(TabZone[k][1],TabZone[k+1][1]) && i>=min(TabZone[k][1],TabZone[k+1][1]))
+                                              {
+                                                  coefdir = (TabZone[k][1]-TabZone[k+1][1])/(TabZone[k][0]-TabZone[k+1][0]);
+                                                  ordonn = TabZone[k][1]-(coefdir*TabZone[k][0]);
+                                                  double x = (i-ordonn)/coefdir;
+
+                                                  if (x>=j)
+                                                  {
+                                                      intersect += 1;
+                                                  }
+                                              }
+                                          }
+
+                                          if ((intersect % 2) == 1)
+                                          {
+                                              imageZone.at<uchar>(i,j)=255;
+                                          }
+                                          if ((intersect % 2) == 0)
+                                          {
+                                              imageZone.at<uchar>(i,j)=0;
+                                          }
+
+
+                                      }
+                                    }
+
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Interieur.bmp", imageInt );
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Exterieur.bmp", imageExt );
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Zone.bmp", imageZone );
+                               //   imwrite( "imageBandelette.bmp", image );
+
+
+                                  distanceTransform(imageInt, imageInt, CV_DIST_L2, 3);
+                                //  normalize(imageInt, imageInt, 0, 255, NORM_MINMAX);
+                               //   imshow("Distance Transform ImageInt", imageInt);
+                               //   imwrite( "Interieur.bmp", imageInt );
+
+                                  distanceTransform(imageExt, imageExt, CV_DIST_L2, 3);
+                               //   normalize(imageExt, imageExt, 0, 255, NORM_MINMAX);
+                               //   imshow("Distance Transform ImageExt", imageExt);
+                               //   imwrite( "Exterieur.bmp", imageExt );
+
+                                  cout << " ---> Création Image bandelette et Création courbe " <<endl;
+
+                                  for ( i=0; i<image.rows; i++)
+                                  {
+                                       for ( j=0; j<image.cols; j++)
+                                       {
+                                           if (imageZone.at<uchar>(i,j)==255)
+                                           {
+                                               ///////////////////////
+                                               //////////////////////
+                                               //lignes de niveau
+
+                                               if (imageInt.at<float>(i,j)!=0.)
+                                               {
+                                                   int valeur = ceil(imageInt.at<float>(i,j));
+                                                   if ((valeur%(3*bandelette))<=2)
+                                                   {
+                                                        Vec3b rgb; rgb.val[0]=0; rgb.val[1]=0;rgb.val[2]=255;
+                                                        image.at<Vec3b>(i,j)=rgb;
+                                                   }
+                                               }
+
+                                               if (imageExt.at<float>(i,j)!=0.)
+                                               {
+                                                   int valeur = ceil(imageExt.at<float>(i,j));
+                                                   if ((valeur%(3*bandelette))<=2)
+                                                   {
+                                                        Vec3b rgb; rgb.val[0]=0; rgb.val[1]=255;rgb.val[2]=0;
+                                                        image.at<Vec3b>(i,j)=rgb;
+                                                   }
+                                               }
+
+                                               if (imageInt.at<float>(i,j) <= 2.&& imageExt.at<float>(i,j) <= 2.)
+                                               {
+
+                                                   Vec3b rgb; rgb.val[0]=255; rgb.val[1]=0;rgb.val[2]=0;
+                                                   image.at<Vec3b>(i,j)=rgb;
+                                               }
+
+                                               ///////////////////////
+                                               //////////////////////
+
+                                               if(imageC3.at<uchar>(i,j)==0)
+                                               {
+                                                   if (imageInt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][1] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if (trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][3] = 0;
+                                                       }
+
+                                                   }
+                                                   else if (imageExt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = -ceil(imageExt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][1] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if (trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][3] = 0;
+                                                       }
+
+                                                   }
+                                               }
+                                               //////////////
+                                               else
+                                               {
+                                                   if (imageInt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][2] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if (trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                       }
+
+
+                                                   }
+                                                   else if (imageExt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = -ceil(imageExt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][2] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if(trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                       }
+
+                                                   }
+                                               }
+
+                                               //////////////////////
+                                               //////////////////////
+
+                                           }
+                                       }
+                                  }
+
+                             //     cvSaveImage("imageBandelette.bmp",imag);
+                             //     imwrite( "imageBandelette.bmp", image );
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageBandelette.bmp", image );
+                              //    imageInt.release();imageExt.release();imageZone.release();imageC3.release();
+                                  image.release();
+
+                                  //ranger les Zones pixels par distances et supprimer celles n'ayant pas une surface représentative
+                                  for (int i=0; i<TabCourbe1.size(); i++)
+                                  {
+                                      if (nbPixelMax<(TabCourbe1[i][1]+TabCourbe1[i][2]))
+                                      {
+                                          nbPixelMax = (TabCourbe1[i][1]+TabCourbe1[i][2]);
+                                      }
+                                  }
+
+                                  int tampon0,tampon1,tampon2;
+                                  for (i=0; i<TabCourbe1.size(); i++)
+                                  {
+                                      for ( j=i; j<TabCourbe1.size(); j++)
+                                      {
+                                          if (TabCourbe1[j][0]<TabCourbe1[i][0])
+                                          {
+                                              tampon0 = TabCourbe1[j][0]; tampon1 = TabCourbe1[j][1]; tampon2 = TabCourbe1[j][2];
+                                              TabCourbe1[j][0] = TabCourbe1[i][0]; TabCourbe1[j][1] = TabCourbe1[i][1];TabCourbe1[j][2] = TabCourbe1[i][2];
+                                              TabCourbe1[i][0] = tampon0; TabCourbe1[i][1] = tampon1; TabCourbe1[i][2] = tampon2;
+                                          }
+
+                                      }
+                                     // cout<< TabCourbe1[i][0] <<endl;
+                                  }
+
+                                  ////////////////////////////////////////////////////////////////////////////////////////////////////
+                                  ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
+                                  ofstream fichier2("/home/djiro/annotations/fichierCourbeX.txt");
+                                  ofstream fichier3("/home/djiro/annotations/fichierCourbeY.txt");
+
+                                  //Nombre de pixels objets
+                                 /*
+                                  for (int i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                                      {
+                                          fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1] << endl;
+                                      }
+                                         //pour x = 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                          TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                          fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1] << endl;
+                                      }
+                                  }*/
+                                  /////////////////////////
+                                  //Nombre de Lymphocytes
+                                  /*
+                                  for (int i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                                      {
+                                          fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1]/315 << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]/315 << endl;
+                                      }
+                                         //pour x = 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                          TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                          fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1]/315 << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]/315 << endl;
+                                      }
+                                  }*/
+
+
+                                  //Nombre de Lymphocytes par 5000 micromètre carré
+                                  int x = 1;
+                                 // int densiteMax = ((TabCourbe1[0][1]/315)/((TabCourbe1[0][1]+TabCourbe1[0][2])/46193.2167));
+                                 // int densiteMin = ((TabCourbe1[0][1]/315)/((TabCourbe1[0][1]+TabCourbe1[0][2])/46193.2167));
+                                  int densiteMax = 0;
+                                  int densiteMin = 0;
+
+                                  for ( i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/5)))
+                                      {
+                                          fichier1 << x; fichier1 << " ";fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167)) << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167)) << endl;
+                                          TabCourbe1[i][3] = ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167));
+
+                                          TabCourbeMoy.push_back(vector<int>(2));//ajoute tout les points des courbes afin de les trier
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][0]=TabCourbe1[i][0];
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][1]=TabCourbe1[i][3];
+
+
+                                          if (densiteMax<TabCourbe1[i][3])
+                                          {
+                                              densiteMax = TabCourbe1[i][3];
+                                          }
+                                          if (densiteMin>TabCourbe1[i][3])
+                                          {
+                                              densiteMin = TabCourbe1[i][3];
+                                          }
+                                          x += 1;
+                                      }
+                                         //pour TabCourbe1[i][0] == 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                        //  TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                        //  TabCourbe1[i][2] = (TabCourbe1[i-1][2]+TabCourbe1[i+1][2])/2;
+                                          TabCourbe1[i][1] = TabCourbe1[i+1][1];
+                                          TabCourbe1[i][2] = TabCourbe1[i+1][2];
+
+                                          fichier1 << x;fichier1 << " ";fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << (TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167) << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << (TabCourbe1[i][1]/315.0)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167) << endl;
+                                          TabCourbe1[i][3] = ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167));
+
+                                          TabCourbeMoy.push_back(vector<int>(2));//ajoute tout les points des courbes afin de les trier
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][0]=TabCourbe1[i][0];
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][1]=TabCourbe1[i][3];
+
+                                          if (densiteMax<TabCourbe1[i][3])
+                                          {
+                                              densiteMax = TabCourbe1[i][3];
+                                          }
+                                          if (densiteMin>TabCourbe1[i][3])
+                                          {
+                                              densiteMin = TabCourbe1[i][3];
+                                          }
+                                          x += 1;
+                                      }
+
+                                  }
+
+                                  cout << " ---> Création Image Carte de chaleur " <<endl;
+                                  //////////////////////////////////////////
+                                  /////////////////////////////////////////
+                                  for ( i=0; i<imageC3.rows; i++)
+                                  {
+                                       for ( j=0; j<imageC3.cols; j++)
+                                       {
+                                           if (imageZone.at<uchar>(i,j)==255)
+                                           {
+                                                   if (imageInt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               imageC3.at<uchar>(i,j)= (TabCourbe1[n][3]-densiteMin)*(255/(densiteMax-densiteMin));
+                                                           }
+
+                                                       }
+                                                   }
+                                                   else if (imageExt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = -ceil(imageExt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               imageC3.at<uchar>(i,j)= (TabCourbe1[n][3]-densiteMin)*(255/(densiteMax-densiteMin));
+                                                           }
+
+                                                       }
+                                                   }
+                                           }
+                                           else
+                                           {
+                                               imageC3.at<uchar>(i,j)=0;
+                                           }
+                                       }
+                                  }
+
+                                  applyColorMap(imageC3, imageC3, COLORMAP_JET);
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/CarteDeChaleur.bmp", imageC3);
+
+                                  imageInt.release();imageExt.release();imageZone.release();
+
+                               //   fichierstd= "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageOrig1.bmp";
+                               //   nomFichier = QString::fromStdString(fichierstd);
+                                  Mat image;
+                                  image = imread(fichierstd);
+
+                                  addWeighted(image,0.3,imageC3,0.7,0.,imageC3);
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/CarteDeChaleurImage.bmp", imageC3);
+
+                                  imageC3.release();image.release();
+
+                                  ////////////////////////////////////////
+                                  ////////////////////////////////////////
+
+
+
+
+                                  //Nombre de pixels par Zone
+/*
+                                  for (int i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                                      {
+                                          fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                      }
+                                         //pour x = 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                          TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                          TabCourbe1[i][2] = (TabCourbe1[i-1][2]+TabCourbe1[i+1][2])/2;
+                                          fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                      }
+                                  }*/
+
+
+
+
+                                  /////////////////////////
+
+                                  fichier1.close();fichier2.close();fichier3.close();
+                                  system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
+                                  page4->setPixmap(QPixmap("/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageBandelette.bmp"));
+                                  page4->setScaledContents(true);
+                                  page4->adjustSize();
+
+                                  page6->setPixmap(QPixmap("/home/djiro/annotations/Courbe.png"));
+                                  page6->setScaledContents(true);
+                                  page6->adjustSize();
+
+                                  /////////////////////////////////////////////////////////////////////////////////////////////////////
+
+                          }
+
+                                 for (i=0;i<TabImage.size(); i++)
+                                 {
+                                     TabImage[i][0] = TabImage[i][0]+MinX;
+                                     TabImage[i][1] = MaxY-TabImage[i][1];
+
+                                 }
+
+
+
+                            }
+
+                        }
+
+                fich.close();
+            }
+
+
+   }
+         fichier.close();
+         /////////////////////////////////////////////////
+         //courbe moyenne
+         if (nbCourbe>1)
+         {
+         vector<vector<int> > TabCourbe;
+         for (int i=0; i<TabCourbeMoy.size()-1;i++)
+         {
+             int nbSomme = 0;
+             for (int j=i+1; j<TabCourbeMoy.size();j++)
+             {
+                 if (TabCourbeMoy[i][0]==TabCourbeMoy[j][0])
+                 {
+                     TabCourbeMoy[i][1] += TabCourbeMoy[j][1];
+                     nbSomme += 1;
+                 }
+             }
+             if (nbSomme == (nbCourbe-1))
+             {
+                 TabCourbe.push_back(vector<int>(2));
+                 TabCourbe[TabCourbe.size()-1][0]=TabCourbeMoy[i][0];
+                 TabCourbe[TabCourbe.size()-1][1]=TabCourbeMoy[i][1]/nbSomme;
+             }
+
+         }
+
+         for (int i=0; i<TabCourbe.size()-1; i++)//pour ordonner le tableau
+         {
+             for (int j=i+1; j<TabCourbe.size();j++)
+             {
+                 if (TabCourbe[i][0] > TabCourbe[j][0])
+                 {
+                     int tampX, tampY;
+                     tampX = TabCourbe[i][0];
+                     tampY = TabCourbe[i][1];
+                     TabCourbe[i][0] = TabCourbe[j][0];
+                     TabCourbe[i][1] = TabCourbe[j][1];
+                     TabCourbe[j][0] = tampX;
+                     TabCourbe[j][1] = tampY;
+                 }
+             }
+         }
+
+         ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
+         ofstream fichier2("/home/djiro/annotations/fichierCourbeX.txt");
+         ofstream fichier3("/home/djiro/annotations/fichierCourbeY.txt");
+
+         for (int i=0;i<TabCourbe.size();i++)
+         {
+           //  fichier1 << TabCourbe[i][0]; fichier1 << " "; fichier1 << (TabCourbe[i][1]/315) << endl;
+             fichier2 << TabCourbe[i][0] << endl;
+             fichier3 << TabCourbe[i][1] << endl;
+         }
+         fichier1.close();fichier2.close();fichier3.close();
+         system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
+         page4->setPixmap(QPixmap("/home/djiro/annotations/Courbe.png"));
+         page4->setScaledContents(true);
+         page4->adjustSize();
+
+         }
+       }
+
+       else
+       {
+       cout << "ERREUR: Impossible d'ouvrir le fichier en lecture."<< endl;
+       }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+void Fenetre::imageCytomineA2()
+{
+    string ligne,mot;
+    double coord;//recupère les coordonnées annotation
+    int taille,i,j,term; int premier = 0;
+    bool ok;
+    double demipatch;// = 3040/2; //longueur patch 1mm = 3040 pixels
+    int TermFront = 4903197;//2 recherche par Term
+  //  int TermZone = 3478753;
+   // vector<vector<double> > TabImage;//1 tableau des coordonnées du polygone image
+   // vector<vector<double> > TabZone;// tableau des coordonnées de la Zone à analyser
+
+  int idImage = QInputDialog::getInt(this,tr("Integer"),tr("Entrer Id Image :"),3452832,0,100000000,1,&ok );
+  string idimage = "python /home/djiro/spyder/djiro/client/examples/get_Front_Cord.py "+to_string(idImage);
+  system(idimage.c_str()); int MinX,MaxX,MinY,MaxY;
+
+  ifstream fichier("/home/djiro/annotations/fichier.txt");//où le fichier texte est enregistré
+
+
+       if(fichier)
+       {
+            while(getline(fichier, ligne))
+            { //traiter le texte; supprimer ,()[]
+                ofstream fichier1("/home/djiro/annotations/fichier1.txt");
+                for ( i = 0; i<ligne.size();i++)
+                {
+                    if(ligne[i] ==','||ligne[i]=='('||ligne[i]==')'||ligne[i]=='['||ligne[i]==']')
+                        ligne[i]=' ';
+                }
+                //cout << ligne << endl;
+                fichier1 <<ligne;
+                fichier1.close();
+
+                //retrouver les coordonnées du polygone image selectionné dans le texte
+                ifstream fichier2("/home/djiro/annotations/fichier1.txt");
+                fichier2 >> mot;//1,2
+                fichier2 >> term;//2
+
+               // if (fichierstd=="/home/djiro/annotations/3478753/"+mot+".png")//1 Recherche par Nom
+                  if (TermFront == term)//2 Recherche par Term
+                {
+                    //fichier2 >> mot;//1
+                    fichier2 >> mot;//recupère le mot polygon
+                    //remplir tableau des coordonnées image
+                    taille=0;
+
+                    vector<vector<double> > TabImage;//1 tableau des coordonnées du polygone image
                     while(fichier2 >> coord)
                       {
 
@@ -212,312 +1106,2000 @@ void Fenetre::imageCytomine()
                         taille+=1;
                       }
 
-                    //pour chaque segment du Front trouver les coordonnées du path
+                    fichier2.close();
 
-                    for (i=1;i<taille; i++)
-                    {
-                     //   cout<< TabImage[i][0]; cout<<" "; cout<<TabImage[i][1] <<endl;
+                    /////////////////////////
 
-                        double a,b,c,x1,x2,x3,x4,y1,y2,y3,y4;
-                        int X1,X2,X3,X4,Y1,Y2,Y3,Y4;
-                        a=1;
-                        b=(-2*TabImage[i-1][0]);
-                        c=pow(TabImage[i-1][0],2)-(pow(demipatch,2)*pow((TabImage[i-1][1]-TabImage[i][1]),2)/(pow((TabImage[i-1][1]-TabImage[i][1]),2)+pow((TabImage[i-1][0]-TabImage[i][0]),2)));
-                        x1=(-b-sqrt(pow(b,2)-(4*a*c)))/(2*a);
-                        x2=(-b+sqrt(pow(b,2)-(4*a*c)))/(2*a);
+                            //rechercher les 4 points min et max de la Zone d'interet pour determiner sa boite englobante
+                            MinX = TabImage[TabImage.size()-1][0];
+                            MaxX = TabImage[TabImage.size()-1][0];
+                            MinY = TabImage[TabImage.size()-1][1];
+                            MaxY = TabImage[TabImage.size()-1][1];
 
-                        a=1;
-                        b=(-2*TabImage[i-1][1]);
-                        c=pow(TabImage[i-1][1],2)-(pow(demipatch,2)*pow((TabImage[i-1][0]-TabImage[i][0]),2)/(pow((TabImage[i-1][0]-TabImage[i][0]),2)+pow((TabImage[i-1][1]-TabImage[i][1]),2)));
-                        y1=(-b-sqrt(pow(b,2)-(4*a*c)))/(2*a);
-                        y2=(-b+sqrt(pow(b,2)-(4*a*c)))/(2*a);
+                            for (i=0;i<TabImage.size(); i++)
+                            {
+                                if (TabImage[i][0]<MinX)
+                                {
+                                    MinX = TabImage[i][0];
+                                }
+                                if (TabImage[i][0]>MaxX)
+                                {
+                                    MaxX = TabImage[i][0];
+                                }
+                                if (TabImage[i][1]<MinY)
+                                {
+                                    MinY = TabImage[i][1];
+                                }
+                                if (TabImage[i][1]>MaxY)
+                                {
+                                    MaxY = TabImage[i][1];
+                                }
+                            }
+                            MinX=MinX-distanceExtFront;
+                            MinY=MinY-distanceExtFront;
+                            MaxX=MaxX+distanceExtFront;
+                            MaxY=MaxY+distanceExtFront;
 
-                        //rechercher le Y correspondant à x1
-                        int orthog = ((x1 - TabImage[i-1][0])*(TabImage[i][0]-TabImage[i-1][0]))+((y1-TabImage[i-1][1])*(TabImage[i][1]-TabImage[i-1][1]));
-                        if(orthog == 0)
-                        {
-                            Y1 = y1;
-                            Y2 = y2;
-                        }
-                        else
-                        {
-                            Y1 = y2;
-                            Y2 = y1;
-                        }
+                            int nbcolonne = MaxX - MinX;
+                            int nbligne = MaxY - MinY;
 
-                        X1 = x1;
-                        X2 = x2;
+                            // Creer le boite englobante de l'annotation front tumorale
+                            cout << "création image boite englobante " <<endl;
+                            Mat imageboiteRGB(nbligne, nbcolonne, CV_8UC3);
+
+                            int X1,Y1,X2,Y2,X3,Y3,X4,Y4;
+                            Mat images;
+
+                            for (i=0;i<nbligne; i+=3040)
+                            {
+                                for (j=0;j<nbcolonne; j+=3040)
+                                {
+                                    /*
+                                    idimage = "python /home/djiro/spyder/djiro/client/examples/delete_annotations.py "+to_string(idImage);
+                                    system(idimage.c_str());*/
 
 
-                        a=1;
-                        b=(-2*TabImage[i][0]);
-                        c=pow(TabImage[i][0],2)-(pow(demipatch,2)*pow((TabImage[i-1][1]-TabImage[i][1]),2)/(pow((TabImage[i-1][1]-TabImage[i][1]),2)+pow((TabImage[i-1][0]-TabImage[i][0]),2)));
-                        x3=(-b-sqrt(pow(b,2)-(4*a*c)))/(2*a);
-                        x4=(-b+sqrt(pow(b,2)-(4*a*c)))/(2*a);
+                                    X1 = j+MinX;X4 = X1; X2 = X1+3040;
+                                    if (X2>MaxX)
+                                    {
+                                        X2 = MaxX;
+                                    }
+                                    X3 = X2;
 
-                        a=1;
-                        b=(-2*TabImage[i][1]);
-                        c=pow(TabImage[i][1],2)-(pow(demipatch,2)*pow((TabImage[i-1][0]-TabImage[i][0]),2)/(pow((TabImage[i-1][0]-TabImage[i][0]),2)+pow((TabImage[i-1][1]-TabImage[i][1]),2)));
-                        y3=(-b-sqrt(pow(b,2)-(4*a*c)))/(2*a);
-                        y4=(-b+sqrt(pow(b,2)-(4*a*c)))/(2*a);
+                                    Y1 = MaxY-i; Y2=Y1; Y4=Y1-3040;
+                                    if (Y4<MinY)
+                                    {
+                                        Y4 = MinY;
+                                    }
+                                    Y3 = Y4;
+                                    string commande = "python /home/djiro/spyder/djiro/client/examples/create_annotation.py "+to_string(idImage)+" "+to_string(X1)+" "+to_string(Y1)+" "+to_string(X2)+" "+to_string(Y2)+" "+to_string(X3)+" "+to_string(Y3)+" "+to_string(X4)+" "+to_string(Y4);
+                                    system(commande.c_str());
 
-                        orthog = ((x4 - TabImage[i][0])*(TabImage[i-1][0]-TabImage[i][0]))+((y4-TabImage[i][1])*(TabImage[i-1][1]-TabImage[i][1]));
-                        if(orthog == 0)
-                        {
-                            Y4 = y4;
-                            Y3 = y3;
-                        }
-                        else
-                        {
-                            Y4 = y3;
-                            Y3 = y4;
-                        }  // maxC1 = 255-((255*pixel.val[2]*(255-pixel.val[1]))/(255*(pixel.val[2]+1)));minC1 =maxC1;//3
+                                    idimage = "python /home/djiro/spyder/djiro/client/examples/get_annotations.py "+to_string(idImage);
+                                    system(idimage.c_str());
 
-                        X4 = x4;
-                        X3 = x3;
+                                    //lire l'image
 
-                        string commande = "python /home/djiro/spyder/djiro/client/examples/create_annotation.py "+to_string(idImage)+" "+to_string(X1)+" "+to_string(Y1)+" "+to_string(X2)+" "+to_string(Y2)+" "+to_string(X4)+" "+to_string(Y4)+" "+to_string(X3)+" "+to_string(Y3);
-                        system(commande.c_str());
+                                    ifstream fichiers("/home/djiro/annotations/fichier.txt");
+                                    fichiers >> mot;
+                                    fichierstd= "/home/djiro/annotations/3478753/"+mot+".png";//1 Recherche par Nom
+                                    images = imread(fichierstd);
 
-                        idimage = "python /home/djiro/spyder/djiro/client/examples/get_annotations.py "+to_string(idImage);
-                        system(idimage.c_str());
+                                    for (int n=0;n<images.rows; n++)
+                                    {
+                                        for (int m=0;m<images.cols;m++)
+                                        {
+                                            ////////////////////////////////////
+                                            Vec3b rgb=images.at<Vec3b>(n,m);
+                                            imageboiteRGB.at<Vec3b>(n+i,m+j)=rgb;
+                                            ////////////////////////////////////////
+                                        }
+                                    }
 
-                        //////////////////
-                        idimage = "python /home/djiro/spyder/djiro/client/examples/delete_annotations.py "+to_string(idImage);
-                        system(idimage.c_str());
-                        /////////////////
 
-                        ////////////////////////////////
-                        //////////////////
-                        //ouverture des images
-                        ifstream fichier3("/home/djiro/annotations/fichier.txt");
-                        if(fichier3)
-                        {
+                                }
 
-                           //  while(getline(fichier3, ligne)) //traiter les images les unes après les autres
-                             {
+                            }
+
+                            idimage = "rm -r /home/djiro/annotations/3478753";
+                            system(idimage.c_str());
+                            images.release();
+
+                            imwrite("/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageOrig1.bmp",imageboiteRGB);
+                            imageboiteRGB.release();
+
+                            //nouveaux coordonnées sur petite image des points du polygone
+
+                                 for (i=0;i<TabImage.size(); i++)
+                                 {
+                                     TabImage[i][0] = TabImage[i][0]-MinX;
+                                     TabImage[i][1] = MaxY-TabImage[i][1];
+                                 }
+
+                             /////////////////////////////////////
+                             /////////////////////////////////////
+
+                             fichierstd= "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageOrig1.bmp";
+                             nomFichier = QString::fromStdString(fichierstd);
+                             image = imread(fichierstd);
+
+                                 page1->setPixmap(QPixmap(fichierstd.c_str()));
+                                // page1->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/imageOrig.bmp"));
+                                 page1->setScaledContents(true);
+                                 page1->adjustSize();
+
+                                 page2->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page2->setScaledContents(true);
+                                 page2->adjustSize();
+
+                                 page3->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page3->setScaledContents(true);
+                                 page3->adjustSize();
+
+                                 page4->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page4->setScaledContents(true);
+                                 page4->adjustSize();
+
+                                 page6->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page6->setScaledContents(true);
+                                 page6->adjustSize();
+
+
+                                 if (premier == 0)
+                                 {
+                                     QStringList items;
+                                     items << "Rouge" << "Jaune" << "Vert" << "Cyan"<< "Bleu"<< "Magenta";
+                                     marqueur = QInputDialog::getItem(this, "Seletion de Marqueur","Marqueurs:", items, 0, false, &ok);
+
+                                     premier = 1;
+                                 }
+
+                                 cout << " ---> Traitement image déconvolution " <<endl;
+
+                              //   selectionMarqueur();
+                                 Traitement();
+
+                                 ///////////////////////////////
+                                 //////////////////////////////
+
+                                 cout << " ---> Traitement: Transformée de distance " <<endl;
+                                 //Distances
+                                 if (traitement == true)
+                                 {
+                                     //calcule des distances
+                                 //    fichierstd= "/home/djiro/build-Qt_teste-Sans_nom-Debug/imageOrig1.bmp";
+                                 //    nomFichier = QString::fromStdString(fichierstd);
+                                         image = imread(fichierstd);
+                                         CvScalar pixel; pixel.val[0]=0;pixel.val[1]=255;pixel.val[2]=0;
+
+                                     //tranformé de distance
+                                     seuillage();
+                                     nbCourbe += 1;
+                                     vector<vector<int> > TabCourbe1;TabCourbe1.push_back(vector<int>(4));TabCourbe1[0][0]=0;TabCourbe1[0][1]=0;TabCourbe1[0][2]=0;TabCourbe1[0][3]=0;
+                                     int nbPixelMax = 0;
+                                     //recuperer le nombre de pixels du marqueur par bandelette de 5um(15pixels)car 1mm = 3040pixels
+                             //        int TabTaille = floor(demipatch*2/15.197)+1;
+                                     int Xcourbe = -floor(demipatch/15.197)*5;//première valeur x de la courbe
+                                    // int TabCourbe [TabTaille][3];
+                                     //initialisation
+/*
+                                     for (int i=0; i<TabTaille; i++)
+                                     {
+                                         TabCourbe[i][0]=Xcourbe;
+                                         TabCourbe[i][1]=0;
+                                         TabCourbe[i][2]=0;
+                                         Xcourbe += 5;
+                                     }*/
+
+                                     for (int i=0; i<imageInt.rows; i++)
+                                     {
+                                          for (int j=0; j<imageInt.cols; j++)
+                                          {
+                                          int intersect = 0;
+                                          for (int k=0; k<TabImage.size()-1;k++)
+                                          {
+                                              double ordonn;
+                                              double coefdir;
+                                              if ((TabImage[k][0]-TabImage[k+1][0]) == 0)
+                                              {
+                                                  if(i< max(TabImage[k][1],TabImage[k+1][1]) && i>=min(TabImage[k][1],TabImage[k+1][1]) && j<=TabImage[k][0])
+                                                  {
+                                                      intersect += 1;
+                                                  }
+                                              }
+                                             else if(i< max(TabImage[k][1],TabImage[k+1][1]) && i>=min(TabImage[k][1],TabImage[k+1][1]))
+                                              {
+                                                  coefdir = (TabImage[k][1]-TabImage[k+1][1])/(TabImage[k][0]-TabImage[k+1][0]);
+                                                  ordonn = TabImage[k][1]-(coefdir*TabImage[k][0]);
+                                                  double x = (i-ordonn)/coefdir;
+
+                                                  if (x>=j)
+                                                  {
+                                                      intersect += 1;
+                                                  }
+                                              }
+                                          }
+
+                                          if ((intersect % 2) == 1)
+                                          {
+                                              imageInt.at<uchar>(i,j)=255;
+                                              imageExt.at<uchar>(i,j)= 0;
+                                          }
+
+                                          if ((intersect % 2) == 0)
+                                        //  else
+                                          {
+                                              imageInt.at<uchar>(i,j)=0;
+                                              imageExt.at<uchar>(i,j)=255;
+                                          }
+
+                                      }
+                                    }
+
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Interieur.bmp", imageInt );
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Exterieur.bmp", imageExt );
+                               //   imwrite( "imageBandelette.bmp", image );
+
+
+                                  distanceTransform(imageInt, imageInt, CV_DIST_L2, 3);
+                                //  normalize(imageInt, imageInt, 0, 255, NORM_MINMAX);
+                               //   imshow("Distance Transform ImageInt", imageInt);
+                               //   imwrite( "Interieur.bmp", imageInt );
+
+                                  distanceTransform(imageExt, imageExt, CV_DIST_L2, 3);
+                               //   normalize(imageExt, imageExt, 0, 255, NORM_MINMAX);
+                               //   imshow("Distance Transform ImageExt", imageExt);
+                               //   imwrite( "Exterieur.bmp", imageExt );
+
+                                  cout << " ---> Création Image bandelette et Création courbe " <<endl;
+
+                                  for ( i=0; i<image.rows; i++)
+                                  {
+                                       for ( j=0; j<image.cols; j++)
+                                       {
+                                           {
+                                               ///////////////////////
+                                               //////////////////////
+                                               //lignes de niveau
+
+                                               if (imageInt.at<float>(i,j)!=0.)
+                                               {
+                                                   int valeur = ceil(imageInt.at<float>(i,j));
+                                                   if ((valeur%(3*bandelette))<=2)
+                                                   {
+                                                        Vec3b rgb; rgb.val[0]=0; rgb.val[1]=0;rgb.val[2]=255;
+                                                        image.at<Vec3b>(i,j)=rgb;
+                                                   }
+                                               }
+
+                                               if (imageExt.at<float>(i,j)!=0.&& imageExt.at<float>(i,j)<distanceExtFront)
+                                               {
+                                                   int valeur = ceil(imageExt.at<float>(i,j));
+                                                   if ((valeur%(3*bandelette))<=2)
+                                                   {
+                                                        Vec3b rgb; rgb.val[0]=0; rgb.val[1]=255;rgb.val[2]=0;
+                                                        image.at<Vec3b>(i,j)=rgb;
+                                                   }
+                                               }
+
+                                               if (imageInt.at<float>(i,j) <= 2.&& imageExt.at<float>(i,j) <= 2.)
+                                               {
+
+                                                   Vec3b rgb; rgb.val[0]=255; rgb.val[1]=0;rgb.val[2]=0;
+                                                   image.at<Vec3b>(i,j)=rgb;
+                                               }
+
+                                               ///////////////////////
+                                               //////////////////////
+
+                                               if(imageC3.at<uchar>(i,j)==0)
+                                               {
+                                                   if (imageInt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][1] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if (trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][3] = 0;
+                                                       }
+
+                                                   }
+                                                   else if (imageExt.at<float>(i,j)!=0. && imageExt.at<float>(i,j)<distanceExtFront)
+                                                   {
+                                                       Xcourbe = -ceil(imageExt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][1] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if (trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][3] = 0;
+                                                       }
+
+                                                   }
+                                               }
+                                               //////////////
+                                               else
+                                               {
+                                                   if (imageInt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][2] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if (trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                       }
+
+
+                                                   }
+                                                   else if (imageExt.at<float>(i,j)!=0. && imageExt.at<float>(i,j)<distanceExtFront)
+                                                   {
+                                                       Xcourbe = -ceil(imageExt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][2] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if(trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                       }
+
+                                                   }
+                                               }
+
+                                               //////////////////////
+                                               //////////////////////
+
+                                           }
+                                       }
+                                  }
+
+                             //     cvSaveImage("imageBandelette.bmp",imag);
+                             //     imwrite( "imageBandelette.bmp", image );
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageBandelette.bmp", image );
+                              //    imageInt.release();imageExt.release();imageZone.release();imageC3.release();
+                                  image.release();
+
+                                  //ranger les Zones pixels par distances et supprimer celles n'ayant pas une surface représentative
+                                  for (int i=0; i<TabCourbe1.size(); i++)
+                                  {
+                                      if (nbPixelMax<(TabCourbe1[i][1]+TabCourbe1[i][2]))
+                                      {
+                                          nbPixelMax = (TabCourbe1[i][1]+TabCourbe1[i][2]);
+                                      }
+                                  }
+
+                                  int tampon0,tampon1,tampon2;
+                                  for (i=0; i<TabCourbe1.size(); i++)
+                                  {
+                                      for ( j=i; j<TabCourbe1.size(); j++)
+                                      {
+                                          if (TabCourbe1[j][0]<TabCourbe1[i][0])
+                                          {
+                                              tampon0 = TabCourbe1[j][0]; tampon1 = TabCourbe1[j][1]; tampon2 = TabCourbe1[j][2];
+                                              TabCourbe1[j][0] = TabCourbe1[i][0]; TabCourbe1[j][1] = TabCourbe1[i][1];TabCourbe1[j][2] = TabCourbe1[i][2];
+                                              TabCourbe1[i][0] = tampon0; TabCourbe1[i][1] = tampon1; TabCourbe1[i][2] = tampon2;
+                                          }
+
+                                      }
+                                     // cout<< TabCourbe1[i][0] <<endl;
+                                  }
+
+                                  ////////////////////////////////////////////////////////////////////////////////////////////////////
+                                  ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
+                                  ofstream fichier2("/home/djiro/annotations/fichierCourbeX.txt");
+                                  ofstream fichier3("/home/djiro/annotations/fichierCourbeY.txt");
+
+                                  //Nombre de pixels objets
                                  /*
-                                 ofstream fichier1("/home/djiro/annotations/fichier1.txt");
-                                 fichier1 <<ligne;
-                                 fichier1.close();
+                                  for (int i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                                      {
+                                          fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1] << endl;
+                                      }
+                                         //pour x = 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                          TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                          fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1] << endl;
+                                      }
+                                  }*/
+                                  /////////////////////////
+                                  //Nombre de Lymphocytes
+                                  /*
+                                  for (int i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                                      {
+                                          fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1]/315 << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]/315 << endl;
+                                      }
+                                         //pour x = 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                          TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                          fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1]/315 << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]/315 << endl;
+                                      }
+                                  }*/
 
-                                 //retrouver les coordonnées du polygone image selectionné dans le texte
-                                 ifstream fichier2("/home/djiro/annotations/fichier1.txt");
-                                 fichier2 >> mot;//1,2 */
 
-                                 fichier3 >> mot;
+                                  //Nombre de Lymphocytes par 5000 micromètre carré
+                                  int x = 1;
+                                 // int densiteMax = ((TabCourbe1[0][1]/315)/((TabCourbe1[0][1]+TabCourbe1[0][2])/46193.2167));
+                                 // int densiteMin = ((TabCourbe1[0][1]/315)/((TabCourbe1[0][1]+TabCourbe1[0][2])/46193.2167));
+                                  int densiteMax = 0;
+                                  int densiteMin = 0;
 
-                                 fichierstd= "/home/djiro/annotations/3478753/"+mot+".png";//1 Recherche par Nom
-                                 nomFichier = QString::fromStdString(fichierstd);
+                                  for ( i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/5)))
+                                      {
+                                          fichier1 << x; fichier1 << " ";fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167)) << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167)) << endl;
+                                          TabCourbe1[i][3] = ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167));
 
-                                     IplImage *imag = cvLoadImage(fichierstd.c_str());
-                                     cvSaveImage("imageOrig.bmp",imag);
-                                     cvSaveImage(fichierstd.c_str(),imag);
+                                          TabCourbeMoy.push_back(vector<int>(2));//ajoute tout les points des courbes afin de les trier
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][0]=TabCourbe1[i][0];
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][1]=TabCourbe1[i][3];
 
-                                     //rotation
-                                     Mat orig_image = imread(fichierstd.c_str(),1);
 
-                                     if (abs(TabImage[i][0]-TabImage[i-1][0])<abs(TabImage[i][1]-TabImage[i-1][1]))
-                                     {
-                                         if ((TabImage[i][1]-TabImage[i-1][1])>0)
-                                         {
-                                             fichierstd= "/home/djiro/annotations/3478753/"+mot+".png";
-                                             rotation180(orig_image);
-                                         }
-                                     }
+                                          if (densiteMax<TabCourbe1[i][3])
+                                          {
+                                              densiteMax = TabCourbe1[i][3];
+                                          }
+                                          if (densiteMin>TabCourbe1[i][3])
+                                          {
+                                              densiteMin = TabCourbe1[i][3];
+                                          }
+                                          x += 1;
+                                      }
+                                         //pour TabCourbe1[i][0] == 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                        //  TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                        //  TabCourbe1[i][2] = (TabCourbe1[i-1][2]+TabCourbe1[i+1][2])/2;
+                                          TabCourbe1[i][1] = TabCourbe1[i+1][1];
+                                          TabCourbe1[i][2] = TabCourbe1[i+1][2];
 
-                                     if (abs(TabImage[i][0]-TabImage[i-1][0])>abs(TabImage[i][1]-TabImage[i-1][1]))
-                                     {
-                                         if ((TabImage[i][0]-TabImage[i-1][0])>0)
-                                         {
-                                             fichierstd= "/home/djiro/annotations/3478753/"+mot+".png";
-                                             rotationM90(orig_image);
-                                         }
-                                         if ((TabImage[i][0]-TabImage[i-1][0])<0)
-                                         {
-                                             fichierstd= "/home/djiro/annotations/3478753/"+mot+".png";
-                                             rotation90(orig_image);
-                                         }
-                                     }
+                                          fichier1 << x;fichier1 << " ";fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << (TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167) << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << (TabCourbe1[i][1]/315.0)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167) << endl;
+                                          TabCourbe1[i][3] = ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167));
 
-                                     page1->setPixmap(QPixmap(fichierstd.c_str()));
-                                    // page1->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/imageOrig.bmp"));
-                                     page1->setScaledContents(true);
-                                     page1->adjustSize();
+                                          TabCourbeMoy.push_back(vector<int>(2));//ajoute tout les points des courbes afin de les trier
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][0]=TabCourbe1[i][0];
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][1]=TabCourbe1[i][3];
 
-                                     page2->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
-                                     page2->setScaledContents(true);
-                                     page2->adjustSize();
+                                          if (densiteMax<TabCourbe1[i][3])
+                                          {
+                                              densiteMax = TabCourbe1[i][3];
+                                          }
+                                          if (densiteMin>TabCourbe1[i][3])
+                                          {
+                                              densiteMin = TabCourbe1[i][3];
+                                          }
+                                          x += 1;
+                                      }
 
-                                     page3->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
-                                     page3->setScaledContents(true);
-                                     page3->adjustSize();
+                                  }
 
-                                     page4->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
-                                     page4->setScaledContents(true);
-                                     page4->adjustSize();
+                                  cout << " ---> Création Image Carte de chaleur " <<endl;
+                                  //////////////////////////////////////////
+                                  /////////////////////////////////////////
+                                  for ( i=0; i<imageC3.rows; i++)
+                                  {
+                                       for ( j=0; j<imageC3.cols; j++)
+                                       {
+                                           if (imageZone.at<uchar>(i,j)==255)
+                                           {
+                                                   if (imageInt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               imageC3.at<uchar>(i,j)= (TabCourbe1[n][3]-densiteMin)*(255/(densiteMax-densiteMin));
+                                                           }
 
-                                     page6->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
-                                     page6->setScaledContents(true);
-                                     page6->adjustSize();
+                                                       }
+                                                   }
+                                                   else if (imageExt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = -ceil(imageExt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               imageC3.at<uchar>(i,j)= (TabCourbe1[n][3]-densiteMin)*(255/(densiteMax-densiteMin));
+                                                           }
 
-                                     if (premier == 0)
-                                     {
-                                         QStringList items;
-                                         items << "Rouge" << "Jaune" << "Vert" << "Cyan"<< "Bleu"<< "Magenta";
-                                         marqueur = QInputDialog::getItem(this, "Seletion de Marqueur","Marqueurs:", items, 0, false, &ok);
+                                                       }
+                                                   }
+                                           }
+                                           else
+                                           {
+                                               imageC3.at<uchar>(i,j)=0;
+                                           }
+                                       }
+                                  }
 
-                                         premier = 1;
-                                     }
+                                  applyColorMap(imageC3, imageC3, COLORMAP_JET);
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/CarteDeChaleur.bmp", imageC3);
 
-                                  //   selectionMarqueur();
-                                     Traitement();
-                                     courbes();
-                             }
-                             fichier3.close();
-                        }
+                                  imageInt.release();imageExt.release();imageZone.release();
 
-                    }
+                               //   fichierstd= "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageOrig1.bmp";
+                               //   nomFichier = QString::fromStdString(fichierstd);
+                                  Mat image;
+                                  image = imread(fichierstd);
 
-                    //courbe moyenne
-              /*      for (int i=0; i<TabCourbeMoy.size();i++)
-                    {
-                        int nbSomme = 0;
+                                  addWeighted(image,0.3,imageC3,0.7,0.,imageC3);
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/CarteDeChaleurImage.bmp", imageC3);
 
-                        for (int j=i+1; j<TabCourbeMoy.size();j++)
-                        {
-                            if (TabCourbeMoy[i][0]==TabCourbeMoy[j][0])
-                            {
-                                TabCourbeMoy[i][1] += TabCourbeMoy[j][1];
-                                nbSomme += 1;
-                            }
-                        }
-                        if (nbSomme == nbCourbe)
-                        {
-                            TabCourbeMoy2.push_back(vector<int>(2));
-                            TabCourbeMoy2[TabCourbeMoy2.size()-1][0]=TabCourbeMoy[i][0];
-                            TabCourbeMoy2[TabCourbeMoy2.size()-1][1]=TabCourbeMoy[i][1];
-                        }
-                    }
+                                  imageC3.release();image.release();
 
-                    for (int i=0; i<TabCourbeMoy.size()-1; i++)//pour ordonner le tableau
-                    {
-                        for (int j=i+1; j<TabCourbeMoy.size();j++)
-                        {
-                            if (TabCourbeMoy[i][0] > TabCourbeMoy[j][0])
-                            {
-                                int tampX, tampY;
-                                tampX = TabCourbeMoy[i][0];
-                                tampY = TabCourbeMoy[i][1];
-                                TabCourbeMoy[i][0] = TabCourbeMoy[j][0];
-                                TabCourbeMoy[i][1] = TabCourbeMoy[j][1];
-                                TabCourbeMoy[j][0] = tampX;
-                                TabCourbeMoy[j][1] = tampY;
-                            }
-                        }
-                    }
+                                  ////////////////////////////////////////
+                                  ////////////////////////////////////////
 
-                    ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
-                    ofstream fichier2("/home/djiro/annotations/fichierCourbeX.txt");
-                    ofstream fichier4("/home/djiro/annotations/fichierCourbeY.txt");
+                                  //Nombre de pixels par Zone
+/*
+                                  for (int i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                                      {
+                                          fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                      }
+                                         //pour x = 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                          TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                          TabCourbe1[i][2] = (TabCourbe1[i-1][2]+TabCourbe1[i+1][2])/2;
+                                          fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                      }
+                                  }*/
 
-                    for (int i=0;i<TabCourbeMoy2.size();i++)
-                    {
-                        fichier1 << TabCourbeMoy2[i][0]; fichier1 << " "; fichier1 << TabCourbeMoy2[i][1] << endl;
-                        fichier2 << TabCourbeMoy2[i][0] << endl;
-                        fichier4 << TabCourbeMoy2[i][1] << endl;
-                    }
-                    fichier1.close();fichier2.close();fichier4.close();
-                    system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
-                   // waitKey(0);
-                    page4->setPixmap(QPixmap("/home/djiro/annotations/Courbe.png"));
-                    page4->setScaledContents(true);
-                    page4->adjustSize();
-*/
-                    ///////////////////////
+                                  /////////////////////////
 
-                }
+                                  fichier1.close();fichier2.close();fichier3.close();
+                                  system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
+                                  page4->setPixmap(QPixmap("/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageBandelette.bmp"));
+                                  page4->setScaledContents(true);
+                                  page4->adjustSize();
 
-                fichier2.close();
+                                  page6->setPixmap(QPixmap("/home/djiro/annotations/Courbe.png"));
+                                  page6->setScaledContents(true);
+                                  page6->adjustSize();
+
+                                  /////////////////////////////////////////////////////////////////////////////////////////////////////
+
+                          }
+
+                                 for (i=0;i<TabImage.size(); i++)
+                                 {
+                                     TabImage[i][0] = TabImage[i][0]+MinX;
+                                     TabImage[i][1] = MaxY-TabImage[i][1];
+
+                                 }
             }
-            fichier.close();
+
 
    }
+         fichier.close();
+         /////////////////////////////////////////////////
+         //courbe moyenne
+         if (nbCourbe>1)
+         {
+         vector<vector<int> > TabCourbe;
+         for (int i=0; i<TabCourbeMoy.size()-1;i++)
+         {
+             int nbSomme = 0;
+             for (int j=i+1; j<TabCourbeMoy.size();j++)
+             {
+                 if (TabCourbeMoy[i][0]==TabCourbeMoy[j][0])
+                 {
+                     TabCourbeMoy[i][1] += TabCourbeMoy[j][1];
+                     nbSomme += 1;
+                 }
+             }
+             if (nbSomme == (nbCourbe-1))
+             {
+                 TabCourbe.push_back(vector<int>(2));
+                 TabCourbe[TabCourbe.size()-1][0]=TabCourbeMoy[i][0];
+                 TabCourbe[TabCourbe.size()-1][1]=TabCourbeMoy[i][1]/nbSomme;
+             }
+
+         }
+
+         for (int i=0; i<TabCourbe.size()-1; i++)//pour ordonner le tableau
+         {
+             for (int j=i+1; j<TabCourbe.size();j++)
+             {
+                 if (TabCourbe[i][0] > TabCourbe[j][0])
+                 {
+                     int tampX, tampY;
+                     tampX = TabCourbe[i][0];
+                     tampY = TabCourbe[i][1];
+                     TabCourbe[i][0] = TabCourbe[j][0];
+                     TabCourbe[i][1] = TabCourbe[j][1];
+                     TabCourbe[j][0] = tampX;
+                     TabCourbe[j][1] = tampY;
+                 }
+             }
+         }
+
+         ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
+         ofstream fichier2("/home/djiro/annotations/fichierCourbeX.txt");
+         ofstream fichier3("/home/djiro/annotations/fichierCourbeY.txt");
+
+         for (int i=0;i<TabCourbe.size();i++)
+         {
+           //  fichier1 << TabCourbe[i][0]; fichier1 << " "; fichier1 << (TabCourbe[i][1]/315) << endl;
+             fichier2 << TabCourbe[i][0] << endl;
+             fichier3 << TabCourbe[i][1] << endl;
+         }
+         fichier1.close();fichier2.close();fichier3.close();
+         system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
+         page4->setPixmap(QPixmap("/home/djiro/annotations/Courbe.png"));
+         page4->setScaledContents(true);
+         page4->adjustSize();
+
+         }
+         //////////////////////////////////////////////////////////
+       }
 
        else
        {
        cout << "ERREUR: Impossible d'ouvrir le fichier en lecture."<< endl;
        }
-      ////////////////////////////////////////////////////////////////////
-       ///////////////////////////////////////////////////////////////////
-       /*
-  //ouverture des images
-  ifstream fichier3("/home/djiro/annotations/fichier.txt");
-  if(fichier3)
-  {
-
-       while(getline(fichier3, ligne)) //traiter les images les unes après les autres
-       {
-           ofstream fichier1("/home/djiro/annotations/fichier1.txt");
-           fichier1 <<ligne;
-           fichier1.close();
-
-           //retrouver les coordonnées du polygone image selectionné dans le texte
-           ifstream fichier2("/home/djiro/annotations/fichier1.txt");
-           fichier2 >> mot;//1,2
-
-           fichierstd= "/home/djiro/annotations/3478753/"+mot+".png";//1 Recherche par Nom
-           string am = "/home/djiro/annotations/3478753/"+mot+".bmp";
-           nomFichier = QString::fromStdString(fichierstd);
-
-               IplImage *imag = cvLoadImage(fichierstd.c_str());
-               cvSaveImage("imageOrig.bmp",imag);
-/////////
-              // string maman = "/home/djiro/annotations/3478753/"+mot+".bmp";
-               cvSaveImage(am.c_str(),imag);
-             //  cvSaveImage(maman.c_str(),imag);
-/////////
-              // page1->setPixmap(QPixmap(fichierstd.c_str()));
-               page1->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/imageOrig.bmp"));
-               page1->setScaledContents(true);
-               page1->adjustSize();
-
-               page2->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
-               page2->setScaledContents(true);
-               page2->adjustSize();
-
-               page3->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
-               page3->setScaledContents(true);
-               page3->adjustSize();
-
-               page4->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
-               page4->setScaledContents(true);
-               page4->adjustSize();
-
-               page6->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
-               page6->setScaledContents(true);
-               page6->adjustSize();
-
-               selectionMarqueur();
-           //    courbes();
-
-           fichier2.close();
-          //traitemement de l'image: selection pixel ou Marqueur
-          // selectionMarqueur();
-
-            waitKey(0);
-       }
-       fichier3.close();
-  }
-
-  else
-  {
-  cout << "ERREUR: Impossible d'ouvrir le fichier en lecture."<< endl;
-  }
-*/
-//////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////
 }
+
+void Fenetre::imageCytomineA3()
+{
+    /////////////////////////////////////////////////////
+/*
+    QString path = QFileDialog::getExistingDirectory(this, "Choisissez un dossier");
+    QDir dir(path);
+
+    QString nomDuDossier = dir.dirName();
+    dir.cdUp();
+
+    QString cheminDuDossier = dir.path();
+    QStringList filters;
+    filters << "*.tif" << "*.bmp"<< "*.png"<< "*.gif"<< "*.jpg"<< "*.jpeg";
+    QStringList files = QDir( cheminDuDossier ).entryList( filters );*/
+    int premier = 0;
+
+  //  foreach (QString file, files)
+  //  foreach (nomFichier, files)
+  //  for (int k=0; k<files.size(); k++)
+    {
+
+        nomFichier = "";
+        nomFichier = QFileDialog::getOpenFileName(this, "Ouvrir un fichier",QString(), "Images (*.tif *.bmp *.png *.gif *.jpg *.jpeg)");
+
+     //   nomFichier = files.at(k);
+        // nomFichier = file;
+         ///////////////////////////////////////////
+         int i,j;
+         bool ok;
+
+         fichierstd = nomFichier.toStdString();
+         cout << fichierstd << endl;
+
+         image = imread(fichierstd);
+         imwrite("imageOrig.bmp",image);
+
+             //page1->setPixmap(QPixmap(fichierstd.c_str()));
+             page1->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/imageOrig.bmp"));
+             page1->setScaledContents(true);
+             page1->adjustSize();
+
+             page2->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+             page2->setScaledContents(true);
+             page2->adjustSize();
+
+             page3->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+             page3->setScaledContents(true);
+             page3->adjustSize();
+
+             page4->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+             page4->setScaledContents(true);
+             page4->adjustSize();
+
+             page6->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+             page6->setScaledContents(true);
+             page6->adjustSize();
+
+
+             if (premier == 0)
+             {
+                 QStringList items;
+                 items << "Rouge" << "Jaune" << "Vert" << "Cyan"<< "Bleu"<< "Magenta";
+                 marqueur = QInputDialog::getItem(this, "Seletion de Marqueur","Marqueurs:", items, 0, false, &ok);
+
+                 premier = 1;
+             }
+
+             cout << " ---> Traitement image déconvolution " <<endl;
+
+          //   selectionMarqueur();
+             Traitement();
+
+             cout << " ---> Traitement: Transformée de distance " <<endl;
+             if (traitement == true)
+             {
+                 vector<vector<int> > TabCourbe1;TabCourbe1.push_back(vector<int>(4));TabCourbe1[0][0]=0;TabCourbe1[0][1]=0;TabCourbe1[0][2]=0;TabCourbe1[0][3]=0;
+                 vector<vector<int> > TabCourbe2;TabCourbe2.push_back(vector<int>(4));TabCourbe2[0][0]=0;TabCourbe2[0][1]=0;TabCourbe2[0][2]=0;TabCourbe2[0][3]=0;
+                 int nbPixelMax = 0;
+                 int Xcourbe;//première valeur x de la courbe
+
+                 for (int i=0; i<image.rows; i++)
+                 {
+                     for (int j=0; j<image.cols; j++)
+                     {
+                        Vec3b rgb=image.at<Vec3b>(i,j);
+                        if((rgb.val[0]==255 && rgb.val[1]==255 && rgb.val[2]==255) || (i==0 || i==image.rows || j==0 || j==image.cols))
+                        {
+                            imageInt.at<uchar>(i,j)=0;
+                        }
+                        else
+                            imageInt.at<uchar>(i,j)=255;
+
+                     }
+
+                 }
+
+                 medianBlur(imageInt,imageInt,9);
+                 imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Interieur.bmp", imageInt );
+                 distanceTransform(imageInt, imageInt, CV_DIST_L2, 3);
+            //  normalize(imageInt, imageInt, 0, 255, NORM_MINMAX);
+           //   imshow("Distance Transform ImageInt", imageInt);
+           //   imwrite( "Interieur.bmp", imageInt );
+                 cout << " ---> Création Image bandelette et Création courbe " <<endl;
+
+                 for ( i=0; i<image.rows; i++)
+                 {
+                    for ( j=0; j<image.cols; j++)
+                    {
+                           ///////////////////////
+                           //////////////////////
+                           //lignes de niveau
+
+                           if (imageInt.at<float>(i,j)!=0.)
+                           {
+                               int valeur = ceil(imageInt.at<float>(i,j));
+                               if ((valeur%(3*bandelette))<=2)
+                               {
+                                    Vec3b rgb; rgb.val[0]=0; rgb.val[1]=0;rgb.val[2]=255;
+                                    image.at<Vec3b>(i,j)=rgb;
+                               }
+                           }
+/*
+                           if (imageInt.at<float>(i,j) <= 2.)
+                           {
+
+                               Vec3b rgb; rgb.val[0]=255; rgb.val[1]=0;rgb.val[2]=0;
+                               image.at<Vec3b>(i,j)=rgb;
+                           } */
+
+                           ///////////////////////
+                           //////////////////////
+
+                           if(imageC3.at<uchar>(i,j)==0)
+                           {
+                               if (imageInt.at<float>(i,j)!=0.)
+                               {
+                                   Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                   int trouve = 0;
+                                   for (int n=0; n<TabCourbe1.size(); n++)
+                                   {
+                                       if (TabCourbe1[n][0] == Xcourbe)
+                                       {
+                                           TabCourbe1[n][1] += 1;
+                                           trouve = 1;
+                                       }
+
+                                   }
+                                   if (trouve == 0)
+                                   {
+                                       TabCourbe1.push_back(vector<int>(4));
+                                       TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                       TabCourbe1[TabCourbe1.size()-1][1] = 1;
+                                       TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                       TabCourbe1[TabCourbe1.size()-1][3] = 0;
+                                   }
+
+                               }
+                           }
+                           //////////////
+                           else
+                           {
+                               if (imageInt.at<float>(i,j)!=0.)
+                               {
+                                   Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                   int trouve = 0;
+                                   for (int n=0; n<TabCourbe1.size(); n++)
+                                   {
+                                       if (TabCourbe1[n][0] == Xcourbe)
+                                       {
+                                           TabCourbe1[n][2] += 1;
+                                           trouve = 1;
+                                       }
+
+                                   }
+                                   if (trouve == 0)
+                                   {
+                                       TabCourbe1.push_back(vector<int>(4));
+                                       TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                       TabCourbe1[TabCourbe1.size()-1][1] = 0;
+                                       TabCourbe1[TabCourbe1.size()-1][2] = 1;
+                                       TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                   }
+
+
+                               }
+                           }
+
+                           //////////////////////
+                           //////////////////////
+                   }
+              }
+
+         //     cvSaveImage("imageBandelette.bmp",imag);
+         //     imwrite( "imageBandelette.bmp", image );
+              imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageBandelette.bmp", image );
+          //    imageInt.release();imageExt.release();imageZone.release();imageC3.release();
+              image.release();
+
+              //ranger les Zones pixels par distances et supprimer celles n'ayant pas une surface représentative
+              for (int i=0; i<TabCourbe1.size(); i++)
+              {
+                  if (nbPixelMax<(TabCourbe1[i][1]+TabCourbe1[i][2]))
+                  {
+                      nbPixelMax = (TabCourbe1[i][1]+TabCourbe1[i][2]);
+                  }
+              }
+
+              int tampon0,tampon1,tampon2;
+              for (i=0; i<TabCourbe1.size(); i++)
+              {
+                  for ( j=i; j<TabCourbe1.size(); j++)
+                  {
+                      if (TabCourbe1[j][0]<TabCourbe1[i][0])
+                      {
+                          tampon0 = TabCourbe1[j][0]; tampon1 = TabCourbe1[j][1]; tampon2 = TabCourbe1[j][2];
+                          TabCourbe1[j][0] = TabCourbe1[i][0]; TabCourbe1[j][1] = TabCourbe1[i][1];TabCourbe1[j][2] = TabCourbe1[i][2];
+                          TabCourbe1[i][0] = tampon0; TabCourbe1[i][1] = tampon1; TabCourbe1[i][2] = tampon2;
+                      }
+
+                  }
+                 // cout<< TabCourbe1[i][0] <<endl;
+              }
+
+              ////////////////////////////////////////////////////////////////////////////////////////////////////
+              ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
+              ofstream fichier2("/home/djiro/annotations/fichierCourbeX.txt");
+              ofstream fichier3("/home/djiro/annotations/fichierCourbeY.txt");
+
+              //Nombre de pixels objets
+             /*
+              for (int i=0;i<TabCourbe1.size();i++)
+              {
+                  if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                  {
+                      fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1] << endl;
+                      fichier2 << TabCourbe1[i][0] << endl;
+                      fichier3 << TabCourbe1[i][1] << endl;
+                  }
+                     //pour x = 0 utiliser la moyenne des voisin
+                  if (TabCourbe1[i][0] == 0)
+                  {
+                      TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                      fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1] << endl;
+                      fichier2 << TabCourbe1[i][0] << endl;
+                      fichier3 << TabCourbe1[i][1] << endl;
+                  }
+              }*/
+              /////////////////////////
+              //Nombre de Lymphocytes
+              /*
+              for (int i=0;i<TabCourbe1.size();i++)
+              {
+                  if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                  {
+                      fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1]/315 << endl;
+                      fichier2 << TabCourbe1[i][0] << endl;
+                      fichier3 << TabCourbe1[i][1]/315 << endl;
+                  }
+                     //pour x = 0 utiliser la moyenne des voisin
+                  if (TabCourbe1[i][0] == 0)
+                  {
+                      TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                      fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1]/315 << endl;
+                      fichier2 << TabCourbe1[i][0] << endl;
+                      fichier3 << TabCourbe1[i][1]/315 << endl;
+                  }
+              }*/
+
+
+              //Nombre de Lymphocytes par 5000 micromètre carré
+              int x = 1;
+             // int densiteMax = ((TabCourbe1[0][1]/315)/((TabCourbe1[0][1]+TabCourbe1[0][2])/46193.2167));
+             // int densiteMin = ((TabCourbe1[0][1]/315)/((TabCourbe1[0][1]+TabCourbe1[0][2])/46193.2167));
+              int densiteMax = 0;
+              int densiteMin = 0;
+
+              for ( i=0;i<TabCourbe1.size();i++)
+              {
+                  if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/5)))
+                  {
+                      fichier1 << x; fichier1 << " ";fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167)) << endl;
+                      fichier2 << TabCourbe1[i][0] << endl;
+                      fichier3 << ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167)) << endl;
+                      TabCourbe1[i][3] = ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167));
+
+                      TabCourbeMoy.push_back(vector<int>(2));//ajoute tout les points des courbes afin de les trier
+                      TabCourbeMoy[TabCourbeMoy.size()-1][0]=TabCourbe1[i][0];
+                      TabCourbeMoy[TabCourbeMoy.size()-1][1]=TabCourbe1[i][3];
+
+
+                      if (densiteMax<TabCourbe1[i][3])
+                      {
+                          densiteMax = TabCourbe1[i][3];
+                      }
+                      if (densiteMin>TabCourbe1[i][3])
+                      {
+                          densiteMin = TabCourbe1[i][3];
+                      }
+                      x += 1;
+                  }
+                     //pour TabCourbe1[i][0] == 0 utiliser la moyenne des voisin
+                  if (TabCourbe1[i][0] == 0)
+                  {
+                    //  TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                    //  TabCourbe1[i][2] = (TabCourbe1[i-1][2]+TabCourbe1[i+1][2])/2;
+                      TabCourbe1[i][1] = TabCourbe1[i+1][1];
+                      TabCourbe1[i][2] = TabCourbe1[i+1][2];
+
+                      fichier1 << x;fichier1 << " ";fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << (TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167) << endl;
+                      fichier2 << TabCourbe1[i][0] << endl;
+                      fichier3 << (TabCourbe1[i][1]/315.0)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167) << endl;
+                      TabCourbe1[i][3] = ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167));
+
+                      TabCourbeMoy.push_back(vector<int>(2));//ajoute tout les points des courbes afin de les trier
+                      TabCourbeMoy[TabCourbeMoy.size()-1][0]=TabCourbe1[i][0];
+                      TabCourbeMoy[TabCourbeMoy.size()-1][1]=TabCourbe1[i][3];
+
+                      if (densiteMax<TabCourbe1[i][3])
+                      {
+                          densiteMax = TabCourbe1[i][3];
+                      }
+                      if (densiteMin>TabCourbe1[i][3])
+                      {
+                          densiteMin = TabCourbe1[i][3];
+                      }
+                      x += 1;
+                  }
+
+              }
+
+              cout << " ---> Création Image Carte de chaleur " <<endl;
+              //////////////////////////////////////////
+              /////////////////////////////////////////
+              for ( i=0; i<imageC3.rows; i++)
+              {
+                   for ( j=0; j<imageC3.cols; j++)
+                   {
+                       if (imageInt.at<float>(i,j)!=0.)
+                       {
+                           Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                           for (int n=0; n<TabCourbe1.size(); n++)
+                           {
+                               if (TabCourbe1[n][0] == Xcourbe)
+                               {
+                                   imageC3.at<uchar>(i,j)= (TabCourbe1[n][3]-densiteMin)*(255/(densiteMax-densiteMin));
+                               }
+
+                           }
+
+                       }
+                       else
+                       {
+                           imageC3.at<uchar>(i,j)=0;
+                       }
+                   }
+              }
+
+              applyColorMap(imageC3, imageC3, COLORMAP_JET);
+              imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/CarteDeChaleur.bmp", imageC3);
+
+              //imageInt.release();
+              imageExt.release();imageZone.release();
+
+           //   fichierstd= "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageOrig1.bmp";
+           //   nomFichier = QString::fromStdString(fichierstd);
+              Mat image;
+              image = imread(fichierstd);
+
+              addWeighted(image,0.3,imageC3,0.7,0.,imageC3);
+              imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/CarteDeChaleurImage.bmp", imageC3);
+
+              imageC3.release();
+              //image.release();
+              fichier1.close();fichier2.close();fichier3.close();
+              system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
+
+              ////////////////////////////////////////
+              ////////////////////////////////////////
+
+              for ( i=0; i<image.rows; i++)
+              {
+                 for ( j=0; j<image.cols; j++)
+                 {
+
+                        if(imageC2.at<uchar>(i,j)==0)
+                        {
+                            if (imageInt.at<float>(i,j)!=0.)
+                            {
+                                Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                int trouve = 0;
+                                for (int n=0; n<TabCourbe2.size(); n++)
+                                {
+                                    if (TabCourbe2[n][0] == Xcourbe)
+                                    {
+                                        TabCourbe2[n][1] += 1;
+                                        trouve = 1;
+                                    }
+
+                                }
+                                if (trouve == 0)
+                                {
+                                    TabCourbe2.push_back(vector<int>(4));
+                                    TabCourbe2[TabCourbe2.size()-1][0] = Xcourbe;
+                                    TabCourbe2[TabCourbe2.size()-1][1] = 1;
+                                    TabCourbe2[TabCourbe2.size()-1][2] = 0;
+                                    TabCourbe2[TabCourbe2.size()-1][3] = 0;
+                                }
+
+                            }
+                        }
+                        //////////////
+                        else
+                        {
+                            if (imageInt.at<float>(i,j)!=0.)
+                            {
+                                Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                int trouve = 0;
+                                for (int n=0; n<TabCourbe2.size(); n++)
+                                {
+                                    if (TabCourbe2[n][0] == Xcourbe)
+                                    {
+                                        TabCourbe2[n][2] += 1;
+                                        trouve = 1;
+                                    }
+
+                                }
+                                if (trouve == 0)
+                                {
+                                    TabCourbe2.push_back(vector<int>(4));
+                                    TabCourbe2[TabCourbe2.size()-1][0] = Xcourbe;
+                                    TabCourbe2[TabCourbe2.size()-1][1] = 0;
+                                    TabCourbe2[TabCourbe2.size()-1][2] = 1;
+                                    TabCourbe2[TabCourbe2.size()-1][2] = 0;
+                                }
+
+
+                            }
+                        }
+
+                        //////////////////////
+                        //////////////////////
+                }
+           }
+
+       //    imageInt.release();imageExt.release();imageZone.release();imageC3.release();
+           image.release();
+
+           //ranger les Zones pixels par distances et supprimer celles n'ayant pas une surface représentative
+           for (int i=0; i<TabCourbe2.size(); i++)
+           {
+               if (nbPixelMax<(TabCourbe2[i][1]+TabCourbe2[i][2]))
+               {
+                   nbPixelMax = (TabCourbe2[i][1]+TabCourbe2[i][2]);
+               }
+           }
+
+           for (i=0; i<TabCourbe2.size(); i++)
+           {
+               for ( j=i; j<TabCourbe2.size(); j++)
+               {
+                   if (TabCourbe2[j][0]<TabCourbe2[i][0])
+                   {
+                       tampon0 = TabCourbe2[j][0]; tampon1 = TabCourbe2[j][1]; tampon2 = TabCourbe2[j][2];
+                       TabCourbe2[j][0] = TabCourbe2[i][0]; TabCourbe2[j][1] = TabCourbe2[i][1];TabCourbe2[j][2] = TabCourbe2[i][2];
+                       TabCourbe2[i][0] = tampon0; TabCourbe2[i][1] = tampon1; TabCourbe2[i][2] = tampon2;
+                   }
+
+               }
+              // cout<< TabCourbe1[i][0] <<endl;
+           }
+
+           ////////////////////////////////////////////////////////////////////////////////////////////////////
+           ofstream fichier4("/home/djiro/annotations/fichierCourbe.txt");
+           ofstream fichier5("/home/djiro/annotations/fichierCourbeX.txt");
+           ofstream fichier6("/home/djiro/annotations/fichierCourbeY.txt");
+
+           //Nombre de pixels objets
+          /*
+           for (int i=0;i<TabCourbe1.size();i++)
+           {
+               if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+               {
+                   fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1] << endl;
+                   fichier2 << TabCourbe1[i][0] << endl;
+                   fichier3 << TabCourbe1[i][1] << endl;
+               }
+                  //pour x = 0 utiliser la moyenne des voisin
+               if (TabCourbe1[i][0] == 0)
+               {
+                   TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                   fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1] << endl;
+                   fichier2 << TabCourbe1[i][0] << endl;
+                   fichier3 << TabCourbe1[i][1] << endl;
+               }
+           }*/
+           /////////////////////////
+           //Nombre de Lymphocytes
+           /*
+           for (int i=0;i<TabCourbe1.size();i++)
+           {
+               if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+               {
+                   fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1]/315 << endl;
+                   fichier2 << TabCourbe1[i][0] << endl;
+                   fichier3 << TabCourbe1[i][1]/315 << endl;
+               }
+                  //pour x = 0 utiliser la moyenne des voisin
+               if (TabCourbe1[i][0] == 0)
+               {
+                   TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                   fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1]/315 << endl;
+                   fichier2 << TabCourbe1[i][0] << endl;
+                   fichier3 << TabCourbe1[i][1]/315 << endl;
+               }
+           }*/
+
+
+           //Nombre de Lymphocytes par 5000 micromètre carré
+           x = 1;
+          // int densiteMax = ((TabCourbe1[0][1]/315)/((TabCourbe1[0][1]+TabCourbe1[0][2])/46193.2167));
+          // int densiteMin = ((TabCourbe1[0][1]/315)/((TabCourbe1[0][1]+TabCourbe1[0][2])/46193.2167));
+           densiteMax = 0;
+           densiteMin = 0;
+
+           for ( i=0;i<TabCourbe2.size();i++)
+           {
+               if ((TabCourbe2[i][0] != 0)&&((TabCourbe2[i][1]+TabCourbe2[i][2])>(nbPixelMax/5)))
+               {
+                   fichier4 << x; fichier4 << " ";fichier4 << TabCourbe2[i][0]; fichier4 << " "; fichier4 << ((TabCourbe2[i][1]/pow(DiametreCellule/diametrePixel,2))/((TabCourbe2[i][1]+TabCourbe2[i][2])/46193.2167)) << endl;
+                   fichier5 << TabCourbe2[i][0] << endl;
+                   fichier6 << ((TabCourbe2[i][1]/pow(DiametreCellule/diametrePixel,2))/((TabCourbe2[i][1]+TabCourbe2[i][2])/46193.2167)) << endl;
+                   TabCourbe2[i][3] = ((TabCourbe2[i][1]/pow(DiametreCellule/diametrePixel,2))/((TabCourbe2[i][1]+TabCourbe2[i][2])/46193.2167));
+
+                   if (densiteMax<TabCourbe2[i][3])
+                   {
+                       densiteMax = TabCourbe2[i][3];
+                   }
+                   if (densiteMin>TabCourbe2[i][3])
+                   {
+                       densiteMin = TabCourbe2[i][3];
+                   }
+                   x += 1;
+               }
+                  //pour TabCourbe1[i][0] == 0 utiliser la moyenne des voisin
+               if (TabCourbe2[i][0] == 0)
+               {
+                 //  TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                 //  TabCourbe1[i][2] = (TabCourbe1[i-1][2]+TabCourbe1[i+1][2])/2;
+                   TabCourbe2[i][1] = TabCourbe2[i+1][1];
+                   TabCourbe2[i][2] = TabCourbe2[i+1][2];
+
+                   fichier4 << x;fichier4 << " ";fichier4 << TabCourbe2[i][0]; fichier4 << " "; fichier4 << (TabCourbe2[i][1]/pow(DiametreCellule/diametrePixel,2))/((TabCourbe2[i][1]+TabCourbe2[i][2])/46193.2167) << endl;
+                   fichier5 << TabCourbe2[i][0] << endl;
+                   fichier6 << (TabCourbe2[i][1]/pow(DiametreCellule/diametrePixel,2))/((TabCourbe2[i][1]+TabCourbe2[i][2])/46193.2167) << endl;
+                   TabCourbe2[i][3] = ((TabCourbe2[i][1]/pow(DiametreCellule/diametrePixel,2))/((TabCourbe2[i][1]+TabCourbe2[i][2])/46193.2167));
+
+                   if (densiteMax<TabCourbe2[i][3])
+                   {
+                       densiteMax = TabCourbe2[i][3];
+                   }
+                   if (densiteMin>TabCourbe2[i][3])
+                   {
+                       densiteMin = TabCourbe2[i][3];
+                   }
+                   x += 1;
+               }
+
+           }
+
+           cout << " ---> Création Image Carte de chaleur " <<endl;
+
+           for ( i=0; i<imageC2.rows; i++)
+           {
+                for ( j=0; j<imageC2.cols; j++)
+                {
+                    if (imageInt.at<float>(i,j)!=0.)
+                    {
+                        Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                        for (int n=0; n<TabCourbe2.size(); n++)
+                        {
+                            if (TabCourbe2[n][0] == Xcourbe)
+                            {
+                                imageC2.at<uchar>(i,j)= (TabCourbe2[n][3]-densiteMin)*(255/(densiteMax-densiteMin));
+                            }
+
+                        }
+
+                    }
+                    else
+                    {
+                        imageC2.at<uchar>(i,j)=0;
+                    }
+                }
+           }
+
+           applyColorMap(imageC2, imageC2, COLORMAP_JET);
+           imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/CarteDeChaleur.bmp", imageC2);
+
+           imageInt.release();
+
+        //   fichierstd= "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageOrig1.bmp";
+        //   nomFichier = QString::fromStdString(fichierstd);
+
+           image = imread(fichierstd);
+
+           addWeighted(image,0.3,imageC2,0.7,0.,imageC2);
+           imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/CarteDeChaleurImage.bmp", imageC2);
+
+           imageC2.release();image.release();
+
+
+
+
+
+              ////////////////////////////////////////
+              ///////////////////////////////////////
+              //Nombre de pixels par Zone
+/*
+              for (int i=0;i<TabCourbe1.size();i++)
+              {
+                  if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                  {
+                      fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                      fichier2 << TabCourbe1[i][0] << endl;
+                      fichier3 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                  }
+                     //pour x = 0 utiliser la moyenne des voisin
+                  if (TabCourbe1[i][0] == 0)
+                  {
+                      TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                      TabCourbe1[i][2] = (TabCourbe1[i-1][2]+TabCourbe1[i+1][2])/2;
+                      fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                      fichier2 << TabCourbe1[i][0] << endl;
+                      fichier3 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                  }
+              }*/
+
+              /////////////////////////
+
+              fichier4.close();fichier5.close();fichier6.close();
+              //system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
+              system("python /home/djiro/spyder/djiro/client/examples/courbe2.py");
+
+              page4->setPixmap(QPixmap("/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageBandelette.bmp"));
+              page4->setScaledContents(true);
+              page4->adjustSize();
+
+              page6->setPixmap(QPixmap("/home/djiro/annotations/Courbe.png"));
+              page6->setScaledContents(true);
+              page6->adjustSize();
+
+              /////////////////////////////////////////////////////////////////////////////////////////////////////
+
+      }
+//////////////////////////////////////////////////////////
+}
+
+}
+
+void Fenetre::imageCytomineA4()
+{
+    string ligne;
+    int i,j; int premier = 0; int taille = 0;
+    bool ok;
+    double demipatch;// = 3040/2; //longueur patch 1mm = 3040 pixels
+
+    nomFichier = "";
+    nomFichier = QFileDialog::getOpenFileName(this, "Ouvrir un fichier",QString(), "Images (*.tif *.bmp *.png *.gif *.jpg *.jpeg)");
+
+
+        fichierstd = nomFichier.toStdString();
+        vector<vector<double> > TabImage;//1 tableau des coordonnées du polygone image
+
+  ifstream fichier(fichierstd +".txt");//où le fichier texte est enregistré
+ // ofstream fichier1(fichierstd +".txt");
+
+    if(fichier)
+        {
+                while(getline(fichier, ligne))
+                {
+
+
+                ofstream fichier1("/home/djiro/annotations/fichier1.txt");
+                fichier1 <<ligne;
+                fichier1.close();
+                TabImage.push_back(vector<double>(2));
+                //retrouver les coordonnées du polygone image selectionné dans le texte
+                ifstream fichier2("/home/djiro/annotations/fichier1.txt");
+                fichier2 >> TabImage[taille][0];
+                fichier2 >> TabImage[taille][1];
+                fichier1.close();
+                taille+=1;
+                }
+
+                             /////////////////////////////////////
+                             /////////////////////////////////////
+
+                           //  fichierstd= "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageOrig1.bmp";
+                           //  nomFichier = QString::fromStdString(fichierstd);
+                             image = imread(fichierstd);
+
+                                 page1->setPixmap(QPixmap(fichierstd.c_str()));
+                                // page1->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/imageOrig.bmp"));
+                                 page1->setScaledContents(true);
+                                 page1->adjustSize();
+
+                                 page2->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page2->setScaledContents(true);
+                                 page2->adjustSize();
+
+                                 page3->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page3->setScaledContents(true);
+                                 page3->adjustSize();
+
+                                 page4->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page4->setScaledContents(true);
+                                 page4->adjustSize();
+
+                                 page6->setPixmap(QPixmap("/home/djiro/annotations/ima.png"));
+                                 page6->setScaledContents(true);
+                                 page6->adjustSize();
+
+
+                                 if (premier == 0)
+                                 {
+                                     QStringList items;
+                                     items << "Rouge" << "Jaune" << "Vert" << "Cyan"<< "Bleu"<< "Magenta";
+                                     marqueur = QInputDialog::getItem(this, "Seletion de Marqueur","Marqueurs:", items, 0, false, &ok);
+
+                                     premier = 1;
+                                 }
+
+                                 cout << " ---> Traitement image déconvolution " <<endl;
+
+                              //   selectionMarqueur();
+                                 Traitement();
+
+                                 ///////////////////////////////
+                                 //////////////////////////////
+
+                                 cout << " ---> Traitement: Transformée de distance " <<endl;
+                                 //Distances
+                                 if (traitement == true)
+                                 {
+                                     //calcule des distances
+                                 //    fichierstd= "/home/djiro/build-Qt_teste-Sans_nom-Debug/imageOrig1.bmp";
+                                 //    nomFichier = QString::fromStdString(fichierstd);
+                                         image = imread(fichierstd);
+                                         CvScalar pixel; pixel.val[0]=0;pixel.val[1]=255;pixel.val[2]=0;
+
+                                     //tranformé de distance
+                                     seuillage();
+                                     nbCourbe += 1;
+                                     vector<vector<int> > TabCourbe1;TabCourbe1.push_back(vector<int>(4));TabCourbe1[0][0]=0;TabCourbe1[0][1]=0;TabCourbe1[0][2]=0;TabCourbe1[0][3]=0;
+                                     int nbPixelMax = 0;
+                                     //recuperer le nombre de pixels du marqueur par bandelette de 5um(15pixels)car 1mm = 3040pixels
+                             //        int TabTaille = floor(demipatch*2/15.197)+1;
+                                     int Xcourbe = -floor(demipatch/15.197)*5;//première valeur x de la courbe
+                                    // int TabCourbe [TabTaille][3];
+                                     //initialisation
+/*
+                                     for (int i=0; i<TabTaille; i++)
+                                     {
+                                         TabCourbe[i][0]=Xcourbe;
+                                         TabCourbe[i][1]=0;
+                                         TabCourbe[i][2]=0;
+                                         Xcourbe += 5;
+                                     }*/
+
+                                     for (int i=0; i<imageInt.rows; i++)
+                                     {
+                                          for (int j=0; j<imageInt.cols; j++)
+                                          {
+                                          int intersect = 0;
+                                          for (int k=0; k<TabImage.size()-1;k++)
+                                          {
+                                              double ordonn;
+                                              double coefdir;
+                                              if ((TabImage[k][0]-TabImage[k+1][0]) == 0)
+                                              {
+                                                  if(i< max(TabImage[k][1],TabImage[k+1][1]) && i>=min(TabImage[k][1],TabImage[k+1][1]) && j<=TabImage[k][0])
+                                                  {
+                                                      intersect += 1;
+                                                  }
+                                              }
+                                             else if(i< max(TabImage[k][1],TabImage[k+1][1]) && i>=min(TabImage[k][1],TabImage[k+1][1]))
+                                              {
+                                                  coefdir = (TabImage[k][1]-TabImage[k+1][1])/(TabImage[k][0]-TabImage[k+1][0]);
+                                                  ordonn = TabImage[k][1]-(coefdir*TabImage[k][0]);
+                                                  double x = (i-ordonn)/coefdir;
+
+                                                  if (x>=j)
+                                                  {
+                                                      intersect += 1;
+                                                  }
+                                              }
+                                          }
+
+                                          if ((intersect % 2) == 1)
+                                          {
+                                              imageInt.at<uchar>(i,j)=255;
+                                              imageExt.at<uchar>(i,j)= 0;
+                                          }
+
+                                          if ((intersect % 2) == 0)
+                                        //  else
+                                          {
+                                              imageInt.at<uchar>(i,j)=0;
+                                              imageExt.at<uchar>(i,j)=255;
+                                          }
+
+                                      }
+                                    }
+
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Interieur.bmp", imageInt );
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Exterieur.bmp", imageExt );
+                               //   imwrite( "imageBandelette.bmp", image );
+
+
+                                  distanceTransform(imageInt, imageInt, CV_DIST_L2, 3);
+                                //  normalize(imageInt, imageInt, 0, 255, NORM_MINMAX);
+                               //   imshow("Distance Transform ImageInt", imageInt);
+                               //   imwrite( "Interieur.bmp", imageInt );
+
+                                  distanceTransform(imageExt, imageExt, CV_DIST_L2, 3);
+                               //   normalize(imageExt, imageExt, 0, 255, NORM_MINMAX);
+                               //   imshow("Distance Transform ImageExt", imageExt);
+                               //   imwrite( "Exterieur.bmp", imageExt );
+
+                                  cout << " ---> Création Image bandelette et Création courbe " <<endl;
+
+                                  for ( i=0; i<image.rows; i++)
+                                  {
+                                       for ( j=0; j<image.cols; j++)
+                                       {
+                                           {
+                                               ///////////////////////
+                                               //////////////////////
+                                               //lignes de niveau
+
+                                               if (imageInt.at<float>(i,j)!=0.)
+                                               {
+                                                   int valeur = ceil(imageInt.at<float>(i,j));
+                                                   if ((valeur%(3*bandelette))<=2)
+                                                   {
+                                                        Vec3b rgb; rgb.val[0]=0; rgb.val[1]=0;rgb.val[2]=255;
+                                                        image.at<Vec3b>(i,j)=rgb;
+                                                   }
+                                               }
+
+                                               if (imageExt.at<float>(i,j)!=0.&& imageExt.at<float>(i,j)<distanceExtFront)
+                                               {
+                                                   int valeur = ceil(imageExt.at<float>(i,j));
+                                                   if ((valeur%(3*bandelette))<=2)
+                                                   {
+                                                        Vec3b rgb; rgb.val[0]=0; rgb.val[1]=255;rgb.val[2]=0;
+                                                        image.at<Vec3b>(i,j)=rgb;
+                                                   }
+                                               }
+
+                                               if (imageInt.at<float>(i,j) <= 2.&& imageExt.at<float>(i,j) <= 2.)
+                                               {
+
+                                                   Vec3b rgb; rgb.val[0]=255; rgb.val[1]=0;rgb.val[2]=0;
+                                                   image.at<Vec3b>(i,j)=rgb;
+                                               }
+
+                                               ///////////////////////
+                                               //////////////////////
+
+                                               if(imageC3.at<uchar>(i,j)==0)
+                                               {
+                                                   if (imageInt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][1] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if (trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][3] = 0;
+                                                       }
+
+                                                   }
+                                                   else if (imageExt.at<float>(i,j)!=0. && imageExt.at<float>(i,j)<distanceExtFront)
+                                                   {
+                                                       Xcourbe = -ceil(imageExt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][1] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if (trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][3] = 0;
+                                                       }
+
+                                                   }
+                                               }
+                                               //////////////
+                                               else
+                                               {
+                                                   if (imageInt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][2] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if (trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                       }
+
+
+                                                   }
+                                                   else if (imageExt.at<float>(i,j)!=0. && imageExt.at<float>(i,j)<distanceExtFront)
+                                                   {
+                                                       Xcourbe = -ceil(imageExt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       int trouve = 0;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               TabCourbe1[n][2] += 1;
+                                                               trouve = 1;
+                                                           }
+
+                                                       }
+                                                       if(trouve == 0)
+                                                       {
+                                                           TabCourbe1.push_back(vector<int>(4));
+                                                           TabCourbe1[TabCourbe1.size()-1][0] = Xcourbe;
+                                                           TabCourbe1[TabCourbe1.size()-1][1] = 0;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 1;
+                                                           TabCourbe1[TabCourbe1.size()-1][2] = 0;
+                                                       }
+
+                                                   }
+                                               }
+
+                                               //////////////////////
+                                               //////////////////////
+
+                                           }
+                                       }
+                                  }
+
+                             //     cvSaveImage("imageBandelette.bmp",imag);
+                             //     imwrite( "imageBandelette.bmp", image );
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageBandelette.bmp", image );
+                              //    imageInt.release();imageExt.release();imageZone.release();imageC3.release();
+                                  image.release();
+
+                                  //ranger les Zones pixels par distances et supprimer celles n'ayant pas une surface représentative
+                                  for (int i=0; i<TabCourbe1.size(); i++)
+                                  {
+                                      if (nbPixelMax<(TabCourbe1[i][1]+TabCourbe1[i][2]))
+                                      {
+                                          nbPixelMax = (TabCourbe1[i][1]+TabCourbe1[i][2]);
+                                      }
+                                  }
+
+                                  int tampon0,tampon1,tampon2;
+                                  for (i=0; i<TabCourbe1.size(); i++)
+                                  {
+                                      for ( j=i; j<TabCourbe1.size(); j++)
+                                      {
+                                          if (TabCourbe1[j][0]<TabCourbe1[i][0])
+                                          {
+                                              tampon0 = TabCourbe1[j][0]; tampon1 = TabCourbe1[j][1]; tampon2 = TabCourbe1[j][2];
+                                              TabCourbe1[j][0] = TabCourbe1[i][0]; TabCourbe1[j][1] = TabCourbe1[i][1];TabCourbe1[j][2] = TabCourbe1[i][2];
+                                              TabCourbe1[i][0] = tampon0; TabCourbe1[i][1] = tampon1; TabCourbe1[i][2] = tampon2;
+                                          }
+
+                                      }
+                                     // cout<< TabCourbe1[i][0] <<endl;
+                                  }
+
+                                  ////////////////////////////////////////////////////////////////////////////////////////////////////
+                                  ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
+                                  ofstream fichier2("/home/djiro/annotations/fichierCourbeX.txt");
+                                  ofstream fichier3("/home/djiro/annotations/fichierCourbeY.txt");
+
+                                  //Nombre de pixels objets
+                                 /*
+                                  for (int i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                                      {
+                                          fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1] << endl;
+                                      }
+                                         //pour x = 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                          TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                          fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1] << endl;
+                                      }
+                                  }*/
+                                  /////////////////////////
+                                  //Nombre de Lymphocytes
+                                  /*
+                                  for (int i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                                      {
+                                          fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1]/315 << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]/315 << endl;
+                                      }
+                                         //pour x = 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                          TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                          fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1]/315 << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]/315 << endl;
+                                      }
+                                  }*/
+
+
+                                  //Nombre de Lymphocytes par 5000 micromètre carré
+                                  int x = 1;
+                                 // int densiteMax = ((TabCourbe1[0][1]/315)/((TabCourbe1[0][1]+TabCourbe1[0][2])/46193.2167));
+                                 // int densiteMin = ((TabCourbe1[0][1]/315)/((TabCourbe1[0][1]+TabCourbe1[0][2])/46193.2167));
+                                  int densiteMax = 0;
+                                  int densiteMin = 0;
+
+                                  for ( i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/5)))
+                                      {
+                                          fichier1 << x; fichier1 << " ";fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167)) << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167)) << endl;
+                                          TabCourbe1[i][3] = ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167));
+
+                                          TabCourbeMoy.push_back(vector<int>(2));//ajoute tout les points des courbes afin de les trier
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][0]=TabCourbe1[i][0];
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][1]=TabCourbe1[i][3];
+
+
+                                          if (densiteMax<TabCourbe1[i][3])
+                                          {
+                                              densiteMax = TabCourbe1[i][3];
+                                          }
+                                          if (densiteMin>TabCourbe1[i][3])
+                                          {
+                                              densiteMin = TabCourbe1[i][3];
+                                          }
+                                          x += 1;
+                                      }
+                                         //pour TabCourbe1[i][0] == 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                        //  TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                        //  TabCourbe1[i][2] = (TabCourbe1[i-1][2]+TabCourbe1[i+1][2])/2;
+                                          TabCourbe1[i][1] = TabCourbe1[i+1][1];
+                                          TabCourbe1[i][2] = TabCourbe1[i+1][2];
+
+                                          fichier1 << x;fichier1 << " ";fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << (TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167) << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << (TabCourbe1[i][1]/315.0)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167) << endl;
+                                          TabCourbe1[i][3] = ((TabCourbe1[i][1]/315)/((TabCourbe1[i][1]+TabCourbe1[i][2])/46193.2167));
+
+                                          TabCourbeMoy.push_back(vector<int>(2));//ajoute tout les points des courbes afin de les trier
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][0]=TabCourbe1[i][0];
+                                          TabCourbeMoy[TabCourbeMoy.size()-1][1]=TabCourbe1[i][3];
+
+                                          if (densiteMax<TabCourbe1[i][3])
+                                          {
+                                              densiteMax = TabCourbe1[i][3];
+                                          }
+                                          if (densiteMin>TabCourbe1[i][3])
+                                          {
+                                              densiteMin = TabCourbe1[i][3];
+                                          }
+                                          x += 1;
+                                      }
+
+                                  }
+
+                                  cout << " ---> Création Image Carte de chaleur " <<endl;
+                                  //////////////////////////////////////////
+                                  /////////////////////////////////////////
+                                  for ( i=0; i<imageC3.rows; i++)
+                                  {
+                                       for ( j=0; j<imageC3.cols; j++)
+                                       {
+                                           if (imageZone.at<uchar>(i,j)==255)
+                                           {
+                                                   if (imageInt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = ceil(imageInt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               imageC3.at<uchar>(i,j)= (TabCourbe1[n][3]-densiteMin)*(255/(densiteMax-densiteMin));
+                                                           }
+
+                                                       }
+                                                   }
+                                                   else if (imageExt.at<float>(i,j)!=0.)
+                                                   {
+                                                       Xcourbe = -ceil(imageExt.at<float>(i,j)/(3.0394*bandelette))*bandelette;
+                                                       for (int n=0; n<TabCourbe1.size(); n++)
+                                                       {
+                                                           if (TabCourbe1[n][0] == Xcourbe)
+                                                           {
+                                                               imageC3.at<uchar>(i,j)= (TabCourbe1[n][3]-densiteMin)*(255/(densiteMax-densiteMin));
+                                                           }
+
+                                                       }
+                                                   }
+                                           }
+                                           else
+                                           {
+                                               imageC3.at<uchar>(i,j)=0;
+                                           }
+                                       }
+                                  }
+
+                                  applyColorMap(imageC3, imageC3, COLORMAP_JET);
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/CarteDeChaleur.bmp", imageC3);
+
+                                  imageInt.release();imageExt.release();imageZone.release();
+
+                               //   fichierstd= "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageOrig1.bmp";
+                               //   nomFichier = QString::fromStdString(fichierstd);
+                                  Mat image;
+                                  image = imread(fichierstd);
+
+                                  addWeighted(image,0.3,imageC3,0.7,0.,imageC3);
+                                  imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/CarteDeChaleurImage.bmp", imageC3);
+
+                                  imageC3.release();image.release();
+
+                                  ////////////////////////////////////////
+                                  ////////////////////////////////////////
+
+                                  //Nombre de pixels par Zone
+/*
+                                  for (int i=0;i<TabCourbe1.size();i++)
+                                  {
+                                      if ((TabCourbe1[i][0] != 0)&&((TabCourbe1[i][1]+TabCourbe1[i][2])>(nbPixelMax/2)))
+                                      {
+                                          fichier1 << TabCourbe1[i][0]/5; fichier1 << " "; fichier1 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                      }
+                                         //pour x = 0 utiliser la moyenne des voisin
+                                      if (TabCourbe1[i][0] == 0)
+                                      {
+                                          TabCourbe1[i][1] = (TabCourbe1[i-1][1]+TabCourbe1[i+1][1])/2;
+                                          TabCourbe1[i][2] = (TabCourbe1[i-1][2]+TabCourbe1[i+1][2])/2;
+                                          fichier1 << TabCourbe1[i][0]; fichier1 << " "; fichier1 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                          fichier2 << TabCourbe1[i][0] << endl;
+                                          fichier3 << TabCourbe1[i][1]+TabCourbe1[i][2] << endl;
+                                      }
+                                  }*/
+
+                                  /////////////////////////
+
+                                  fichier1.close();fichier2.close();fichier3.close();
+                                  system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
+                                  page4->setPixmap(QPixmap("/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageBandelette.bmp"));
+                                  page4->setScaledContents(true);
+                                  page4->adjustSize();
+
+                                  page6->setPixmap(QPixmap("/home/djiro/annotations/Courbe.png"));
+                                  page6->setScaledContents(true);
+                                  page6->adjustSize();
+
+                                  /////////////////////////////////////////////////////////////////////////////////////////////////////
+
+                          }
+/*
+                                 for (i=0;i<TabImage.size(); i++)
+                                 {
+                                     TabImage[i][0] = TabImage[i][0]+MinX;
+                                     TabImage[i][1] = MaxY-TabImage[i][1];
+
+                                 }*/
+         fichier.close();
+         /////////////////////////////////////////////////
+         //courbe moyenne
+         if (nbCourbe>1)
+         {
+         vector<vector<int> > TabCourbe;
+         for (int i=0; i<TabCourbeMoy.size()-1;i++)
+         {
+             int nbSomme = 0;
+             for (int j=i+1; j<TabCourbeMoy.size();j++)
+             {
+                 if (TabCourbeMoy[i][0]==TabCourbeMoy[j][0])
+                 {
+                     TabCourbeMoy[i][1] += TabCourbeMoy[j][1];
+                     nbSomme += 1;
+                 }
+             }
+             if (nbSomme == (nbCourbe-1))
+             {
+                 TabCourbe.push_back(vector<int>(2));
+                 TabCourbe[TabCourbe.size()-1][0]=TabCourbeMoy[i][0];
+                 TabCourbe[TabCourbe.size()-1][1]=TabCourbeMoy[i][1]/nbSomme;
+             }
+
+         }
+
+         for (int i=0; i<TabCourbe.size()-1; i++)//pour ordonner le tableau
+         {
+             for (int j=i+1; j<TabCourbe.size();j++)
+             {
+                 if (TabCourbe[i][0] > TabCourbe[j][0])
+                 {
+                     int tampX, tampY;
+                     tampX = TabCourbe[i][0];
+                     tampY = TabCourbe[i][1];
+                     TabCourbe[i][0] = TabCourbe[j][0];
+                     TabCourbe[i][1] = TabCourbe[j][1];
+                     TabCourbe[j][0] = tampX;
+                     TabCourbe[j][1] = tampY;
+                 }
+             }
+         }
+
+         ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
+         ofstream fichier2("/home/djiro/annotations/fichierCourbeX.txt");
+         ofstream fichier3("/home/djiro/annotations/fichierCourbeY.txt");
+
+         for (int i=0;i<TabCourbe.size();i++)
+         {
+           //  fichier1 << TabCourbe[i][0]; fichier1 << " "; fichier1 << (TabCourbe[i][1]/315) << endl;
+             fichier2 << TabCourbe[i][0] << endl;
+             fichier3 << TabCourbe[i][1] << endl;
+         }
+         fichier1.close();fichier2.close();fichier3.close();
+         system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
+         page4->setPixmap(QPixmap("/home/djiro/annotations/Courbe.png"));
+         page4->setScaledContents(true);
+         page4->adjustSize();
+
+         }
+         //////////////////////////////////////////////////////////
+       }
+
+       else
+       {
+       cout << "ERREUR: Impossible d'ouvrir le fichier en lecture."<< endl;
+       }
+}
+//////////////////////////////////////////////////////////////////////////////////////////
 
 void Fenetre::ouvrirDialogueChoisir()
 {
@@ -528,6 +3110,7 @@ void Fenetre::ouvrirDialogueChoisir()
    { 
        fichierstd = nomFichier.toStdString();
        IplImage *imag = cvLoadImage(fichierstd.c_str());
+
        cvSaveImage("imageOrig.bmp",imag);
 
     // page1->setPixmap(QPixmap(nomFichier));//n'affiche pas les fichiers .tif
@@ -560,6 +3143,136 @@ void Fenetre::ouvrirDialogueChoisir()
    }
 }
 
+
+void Fenetre::Annotation()
+{
+    if(!nomFichier.isNull())
+    {
+        string fichierstd = nomFichier.toStdString();
+        Mat img = imread(fichierstd);
+     //   int tailleContour = Mat(contour).rows;
+        int i,j, MinX, MaxX, MinY, MaxY;
+        nb=0;
+
+        vector<Point> contoure;
+        namedWindow("Choix Pixel", 1);
+        setMouseCallback("Choix Pixel", mouseAnnotation, &img);
+        imshow("Choix Pixel", img);
+        waitKey(0);
+        //traitement image puis affichage dans page2
+     /*   lcd1->display(Rouge);
+        lcd2->display(Vert);
+        lcd3->display(Bleu);
+        lcd4->display(Teinte);
+        lcd5->display(Saturation);
+        lcd6->display(Luminance);*/
+        destroyWindow("Choix Pixel");
+
+
+
+            MinX = contour[contour.size()-1][0];
+            MaxX = contour[contour.size()-1][0];
+            MinY = contour[contour.size()-1][1];
+            MaxY = contour[contour.size()-1][1];
+
+            nb = contour.size()-nb;
+
+            for (i=nb;i<contour.size(); i++)
+            {
+                if (contour[i][0]<MinX)
+                {
+                    MinX = contour[i][0];
+                }
+                if (contour[i][0]>MaxX)
+                {
+                    MaxX = contour[i][0];
+                }
+                if (contour[i][1]<MinY)
+                {
+                    MinY = contour[i][1];
+                }
+                if (contour[i][1]>MaxY)
+                {
+                    MaxY = contour[i][1];
+                }
+              //  contoure.push_back(Point(contour[i][0],contour[i][1]));
+            }
+            //augmenter l'image de 10*5micromètres du front 10*15,197
+
+            MinX=MinX-distanceExtFront;
+            MinY=MinY-distanceExtFront;
+            MaxX=MaxX+distanceExtFront;
+            MaxY=MaxY+distanceExtFront;
+
+            int nbcolonne = MaxX - MinX;
+            int nbligne = MaxY - MinY;
+
+            /*
+            int nbcolonne = Xmax - Xmin;
+            int nbligne = Ymax - Ymin;*/
+
+            // Creer le boite englobante de l'annotation front tumorale
+            Mat imageboiteRGB(nbligne,nbcolonne,CV_8UC3);
+            for (i=0;i<nbligne; i++)
+            {
+                for (j=0;j<nbcolonne;j++)
+                {
+                    ////////////////////////////////////
+                    Vec3b rgb=img.at<Vec3b>(i+MinY,j+MinX);
+                    imageboiteRGB.at<Vec3b>(i,j)=rgb;
+                    ////////////////////////////////////////
+                }
+            }
+
+            //nouveaux coordonnées sur petite image des points du polygone
+        //    ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
+            ofstream fichier1(fichierstd +".txt");
+
+                 for (i=nb;i<contour.size(); i++)
+                 {
+                     contour[i][0] = contour[i][0]-MinX;
+                     contour[i][1] = contour[i][1]-MinY;
+                     contoure.push_back(Point(contour[i][0],contour[i][1]));
+                     fichier1 << contour[i][0]; fichier1 << " ";fichier1 << contour[i][1] << endl;
+                 }
+
+                 img.release();
+
+
+///////////////////////////////////////////////////
+            const cv::Point *pts = (const cv::Point*) Mat(contoure).data;
+                int npts = Mat(contoure).rows;
+
+                std::cout << "Number of polygon vertices: " << npts << std::endl;
+                std::cout << contour.size() << std::endl;
+
+                imwrite(fichierstd,imageboiteRGB);
+                polylines(imageboiteRGB, &pts,&npts, 1,
+                                true, 			// draw closed contour (i.e. joint end to start)
+                                Scalar(0,255,0),// colour RGB ordering (here = green)
+                                1, 		        // line thickness
+                                CV_AA, 0);
+             //   imwrite(fichierstd,imageboiteRGB);
+
+                for(int i=0; i<contour.size()+1; i++)
+                {
+                    contour.pop_back();
+                }
+                page1->setPixmap(QPixmap(nomFichier));
+                page1->setScaledContents(true);
+                page1->adjustSize();
+
+
+    }
+    else
+    {
+      QMessageBox::information( this, "Information"," Pas d'image sélectionnée ");
+    }
+}
+
+
+
+
 void Fenetre::selectionPixel()//cette fonction permet la selection d'une couleur puis une transformation 1,2,ou 3 est effectuée
 {
     if(!nomFichier.isNull())
@@ -579,6 +3292,7 @@ void Fenetre::selectionPixel()//cette fonction permet la selection d'une couleur
         lcd5->display(Saturation);
         lcd6->display(Luminance);
         destroyWindow("Choix Pixel");
+
 int choix =2;
 
         //////////////////////////////////////////////////////////
@@ -612,6 +3326,7 @@ int choix =2;
 
                 medianBlur(imageC1,imageC2,5);
                 Canny(imageC2,imageC2,10,350);
+
   /*
               //contours
                 medianBlur(imageC1,imageC2,3);
@@ -621,7 +3336,10 @@ int choix =2;
 
           //imshow( "canny", imageC2);
          imwrite( "canny.bmp", imageC2 );
-         page3->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/canny.bmp"));
+
+         imwrite("Otsu.bmp",imageC3);
+         page3->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/Otsu.bmp"));
+
          page3->setScaledContents(true);
          page3->adjustSize();
     }
@@ -722,7 +3440,9 @@ void Fenetre::selectionMarqueur()//cette fonction permet le selection d'un marqu
 
         fonctionNicolasArmand();
 
-        cout<< imageC1.rows; cout << " "; cout << imageC1.cols <<endl;
+
+        cout<< "Taille Image : "; cout<< imageC1.rows; cout << " "; cout << imageC1.cols <<endl;
+
 
         imwrite( "imageC1.bmp", imageC1 );
         page2->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/imageC1.bmp"));
@@ -730,7 +3450,7 @@ void Fenetre::selectionMarqueur()//cette fonction permet le selection d'un marqu
         page2->adjustSize();
         /////////////////////////////////////////////////////////
         // Create a structuring element
-              int erosion_size = 1;
+        /*      int erosion_size = 1;
               Mat element = getStructuringElement(cv::MORPH_CROSS,
                      cv::Size(2 * erosion_size + 1, 2 * erosion_size + 1),
                      cv::Point(-1, -1) );
@@ -740,6 +3460,15 @@ void Fenetre::selectionMarqueur()//cette fonction permet le selection d'un marqu
 
               medianBlur(imageC1,imageC2,5);
               Canny(imageC2,imageC2,10,350);
+              bitwise_not ( imageC2, imageC2 );
+              threshold(imageC1, imageC3, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+          //    imwrite( "Otsu.bmp", imageC3 );
+
+            //  threshold(imageC1, imageC3, 75, 255, CV_THRESH_BINARY);
+              /*
+              distanceTransform(imageC3, imageC3, CV_DIST_L2, 3);
+              normalize(imageC3, imageC3, 0, 1., NORM_MINMAX);
+              imshow("Distance Transform Image", imageC3);*/
 /*
             //contours
               medianBlur(imageC1,imageC2,3);
@@ -748,10 +3477,13 @@ void Fenetre::selectionMarqueur()//cette fonction permet le selection d'un marqu
               //erode (imageC2,imageC2,element); */
 
         //imshow( "canny", imageC2);
-       imwrite( "canny.bmp", imageC2 );
-       page3->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/canny.bmp"));
+   /*    imwrite( "canny.bmp", imageC2 );
+       imwrite( "Otsu.bmp", imageC3 );
+       page3->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/Otsu.bmp"));
        page3->setScaledContents(true);
-       page3->adjustSize();
+
+       page3->adjustSize();*/
+
     }
     else
     {
@@ -774,6 +3506,7 @@ void Fenetre::Traitement()
         {
             Teinte = 0;
         }
+
 
         //Teinte Jaune
         if (itemstd == "Jaune")
@@ -807,34 +3540,22 @@ void Fenetre::Traitement()
 
         fonctionNicolasArmand();
 
-        cout<< imageC1.rows; cout << " "; cout << imageC1.cols <<endl;
+        cout<< "Taille Image : "; cout<< imageC1.rows; cout << " "; cout << imageC1.cols <<endl;
 
-        imwrite( "imageC1.bmp", imageC1 );
-        page2->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/imageC1.bmp"));
+        imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageC1.bmp", imageC1 );
+        page2->setPixmap(QPixmap("/media/djiro/38A09B49A09B0D0E/PROGRAMME/imageC1.bmp"));
         page2->setScaledContents(true);
         page2->adjustSize();
         /////////////////////////////////////////////////////////
-        // Create a structuring element
-              int erosion_size = 1;
-              Mat element = getStructuringElement(cv::MORPH_CROSS,
-                     cv::Size(2 * erosion_size + 1, 2 * erosion_size + 1),
-                     cv::Point(-1, -1) );
 
-        //detection contoures
-            //noyaux
+    //   imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/fibrose.bmp", imageC2 );
+    //   imwrite("/media/djiro/38A09B49A09B0D0E/PROGRAMME/lyphocytes.bmp", imageC3);
 
-              medianBlur(imageC1,imageC2,5);
-              Canny(imageC2,imageC2,10,350);
-/*
-            //contours
-              medianBlur(imageC1,imageC2,3);
-              //dilate(imageC2,imageC2,element);
-              Canny(imageC2,imageC2,10,350);
-              //erode (imageC2,imageC2,element); */
+       imageC1.release();
+       //imageC2.release();
 
-        //imshow( "canny", imageC2);
-       imwrite( "canny.bmp", imageC2 );
-       page3->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/canny.bmp"));
+      // page3->setPixmap(QPixmap("/media/djiro/38A09B49A09B0D0E/PROGRAMME/Otsu.bmp"));
+       page3->setPixmap(QPixmap("/media/djiro/38A09B49A09B0D0E/PROGRAMME/seuillage.bmp"));
        page3->setScaledContents(true);
        page3->adjustSize();
     }
@@ -888,6 +3609,9 @@ void Fenetre::seuillage()
            //noyaux
              medianBlur(imageseuil,imageC2,5);
              Canny(imageC2,imageC2,10,350);
+
+             bitwise_not ( imageC2, imageC2 );
+             threshold(imageC1, imageC3, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
 /*
            //contours
              medianBlur(imageC1,imageC2,3);
@@ -897,6 +3621,8 @@ void Fenetre::seuillage()
 
        //imshow( "canny", imageC2);
       imwrite( "canny.bmp", imageC2 );
+
+      imwrite("Otsu", imageC3);
       page3->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/canny.bmp"));
       page3->setScaledContents(true);
       page3->adjustSize();
@@ -931,6 +3657,8 @@ void Fenetre::courbes()
     if (traitement == true)
     {
         seuillage();
+
+        nbCourbe += 1;
         vector<double> TabCourbe;
         //recuperer le nombre de pixels du marqueur par bandelette de 5um(15pixels)car 1mm = 3040pixels
         int pixelMarq=0;int nbcols = 0;
@@ -939,7 +3667,11 @@ void Fenetre::courbes()
              nbcols +=1;
              for (int i=0; i<imageC2.rows; i++)
              {
-                 if(imageC2.at<uchar>(i,j)>127)
+
+                // if(imageC2.at<uchar>(i,j)==0)//Canny
+                 if(imageC3.at<uchar>(i,j)==0)//Otsu
+                // if(imageC2.at<uchar>(i,j)==0 && imageC3.at<uchar>(i,j)==0)//Canny et Otsu
+
                  {
                      pixelMarq += 1;
                  }
@@ -947,7 +3679,8 @@ void Fenetre::courbes()
              }
 
             // if (nbcols == 15)//si on a 15 cols == 5 um
-               if (((j+1)%15)==0)//à chaque bandelette de 5 um créer cellule tableauCourbe et y insérer le nb objets biologique détecté
+
+               if (((j+1)%(3*bandelette))==0)//à chaque bandelette de 5 um créer cellule tableauCourbe et y insérer le nb objets biologique détecté
              {
                  TabCourbe.push_back(pixelMarq);//conserve nb pixels marqueurs
                //  TabCourbe.push_back(pixelMarq/(nbcols*imageC2.rows));//conserve le nb pixels marqueurs/surface tranche analysée
@@ -957,14 +3690,8 @@ void Fenetre::courbes()
              }
 
            }
-        /*
-        if (pixelMarq!=0 || nbcols != 0)
-        {
-            TabCourbe.push_back(pixelMarq);//la bandelette restante n'atteingnant pas les 5 um
-          //  TabCourbe.push_back(pixelMarq/(nbcols*imageC2.rows));
-            pixelMarq = 0;
-            nbcols = 0;
-        }*/
+
+
 
          int x = -ceil((TabCourbe.size()-1)/2);
          ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
@@ -976,15 +3703,13 @@ void Fenetre::courbes()
              fichier1 << x; fichier1 << " "; fichier1 << TabCourbe[i] << endl;
              fichier2 << x << endl;
              fichier3 << TabCourbe[i] << endl;
-             TabCourbeMoy.push_back(vector<int>(2));//ajoute tout les points des courbes afin de les trier
-             TabCourbeMoy[TabCourbeMoy.size()-1][0]=x;
-             TabCourbeMoy[TabCourbeMoy.size()-1][1]=TabCourbe[i];
-             nbCourbe += 1;
+
              x += 1;
          }
+
          fichier1.close();fichier2.close();fichier3.close();
          system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
-        // waitKey(0);
+
          page4->setPixmap(QPixmap("/home/djiro/annotations/Courbe.png"));
          page4->setScaledContents(true);
          page4->adjustSize();
@@ -1002,6 +3727,7 @@ void Fenetre::mouseEvent(int evt, int x, int y, int flags, void* param)
         (int)(*rgb).at<Vec3b>(y, x)[0],
         (int)(*rgb).at<Vec3b>(y, x)[1],
         (int)(*rgb).at<Vec3b>(y, x)[2]);
+       // contour.push_back(Point(x,y));
 
     Bleu =(int)(*rgb).at<Vec3b>(y, x)[0];
     Vert =(int)(*rgb).at<Vec3b>(y, x)[1];
@@ -1018,73 +3744,26 @@ void Fenetre::mouseEvent(int evt, int x, int y, int flags, void* param)
 
             printf("%d %d HLS: %d, %d, %d\n",
                    x, y,2*hsv.val[0],hsv.val[1],hsv.val[2]);
+
     }
 }
-/*
-void Fenetre::fonctionNicolas()
+
+void Fenetre::mouseAnnotation(int evt, int x, int y, int flags, void* param)
 {
-    // traitement image Nicolas
-        double maxC1,minC1,Teinte1,delta,distance,e;
+    if (evt == CV_EVENT_LBUTTONDOWN)
+    {
+        printf("X= %d  Y= %d \n",
+        x, y);
+        contour.push_back(vector<int>(2));
+        contour[contour.size()-1][0]=x;
+        contour[contour.size()-1][1]=y;
+        nb+=1;
 
-        image = imread(fichierstd);
-        //Mat imageC1;
-        IplImage *image2 = cvLoadImage(fichierstd.c_str());
-        IplImage* hls = cvCloneImage(image2);
-        cvCvtColor(image2, hls, CV_BGR2HLS);
-        cvtColor( image, imageC1, CV_BGR2GRAY );
-        cvtColor( image, imageC2, CV_BGR2GRAY );
-        double pi = 3.14159265358979323846;
-        int i,j;
-        CvScalar pixel;
-        //////////////////
-        e=0.001;
-
-        int TeinteRef=Teinte;
-        //calcule distance de teinte
-          maxC1 =0;minC1 =0;//1
-
-        for ( i=0; i<image.rows; i++)
-          {
-             for ( j=0; j<image.cols; j++)
-             {
-                 pixel=cvGet2D(hls,i,j);
-                 Teinte1 = 2* pixel.val[0];
-
-                 delta = abs(Teinte1-TeinteRef)*2*pi/360;
-                 distance =1-exp((cos(delta)-1)/(cos(delta)+1+e));//1
-
-                 if (distance>maxC1)
-                 {
-                     maxC1 = distance;
-                 }
-                 if (distance<minC1)
-                 {
-                     minC1 = distance;
-                 }
-             }
-        }
-
-        for ( i=0; i<image.rows; i++)
-           {
-             for ( j=0; j<image.cols; j++)
-             {
-                pixel=cvGet2D(hls,i,j);
-                Teinte1 = 2*pixel.val[0];
-
-                delta = abs(Teinte1-TeinteRef)*2*pi/360;
-                distance =1-exp((cos(delta)-1)/(cos(delta)+1+e));//1
-                imageC1.at<uchar>(i,j) = 255*(distance-minC1)/(maxC1-minC1);
-
-             }
-        }
-        /*
-        imwrite( "imageC1.bmp", imageC1 );
-        page2->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/imageC1.bmp"));
-        page2->setScaledContents(true);
-        page2->adjustSize();
-}*/
+    }
+}
 
 void Fenetre::fonctionNicolasArmand()
+
 {
     //traitement par teinte
         double maxC1,minC1,Teinte1,distance,e;
@@ -1095,6 +3774,10 @@ void Fenetre::fonctionNicolasArmand()
         cvCvtColor(image2, hls, CV_BGR2HLS);
         cvtColor( image, imageC1, CV_BGR2GRAY );
         cvtColor( image, imageC2, CV_BGR2GRAY );
+        cvtColor( image, imageC3, CV_BGR2GRAY );
+        cvtColor( image, imageInt, CV_BGR2GRAY );
+        cvtColor( image, imageExt, CV_BGR2GRAY );
+        cvtColor( image, imageZone, CV_BGR2GRAY );
         double pi = 3.14159265358979323846;double delta = 0;
         int i,j;
         CvScalar pixel;
@@ -1145,7 +3828,78 @@ void Fenetre::fonctionNicolasArmand()
 
              }
         }
+
         traitement = true;
+
+        imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/GrisArmand.bmp", imageC1 );
+        imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/GrisNormal.bmp", imageC2 );
+        threshold(imageC1, imageC2, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+        imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Otsu.bmp", imageC2 );
+        threshold(imageC1, imageC3, 75, 255, CV_THRESH_BINARY);
+        imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Seuil75.bmp", imageC3 );
+        threshold(imageC1, imageC3, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
+        ////////////////////////////////////////////
+        int centre1 = 255; double centre2 = 0.;int centre3 = 0;double nbpixel = 0.;
+
+        for ( i=0; i<imageC3.rows; i++)
+           {
+             for ( j=0; j<imageC3.cols; j++)
+             {
+                if (imageC3.at<uchar>(i,j) == 0)
+                {
+                    centre2 += imageC1.at<uchar>(i,j);
+                    nbpixel += 1;
+                    if (imageC1.at<uchar>(i,j) < centre1)
+                    {
+                        centre1 = imageC1.at<uchar>(i,j);
+                    }
+                    if (imageC1.at<uchar>(i,j) > centre3)
+                    {
+                        centre3 = imageC1.at<uchar>(i,j);
+                    
+                    }
+                }
+
+             }
+        }
+        centre2 /= nbpixel;
+        cout<< "Centre1 : "; cout<< centre1; cout << " ";cout<< "Centre2 : "; cout << centre2; cout << " ";cout<< "Centre3 : "; cout << centre3 <<endl;
+
+
+        for ( i=0; i<imageC3.rows; i++)
+           {
+             for ( j=0; j<imageC3.cols; j++)
+             {
+                if (imageC3.at<uchar>(i,j)==0)
+                {
+                    if (abs(imageC1.at<uchar>(i,j)-centre1)<abs(imageC1.at<uchar>(i,j)-centre2))
+                    {
+                        imageC3.at<uchar>(i,j)=0;//image correspondant aux lymphocytes
+                        imageC2.at<uchar>(i,j)=255;//image correspondant a la fibrose
+                    }
+                   // else if (abs(imageC1.at<uchar>(i,j)-centre1)>abs(imageC1.at<uchar>(i,j)-centre2) && abs(imageC1.at<uchar>(i,j)-centre3)>abs(imageC1.at<uchar>(i,j)-centre2))
+                    else if (imageC1.at<uchar>(i,j)<centre2 && abs(imageC1.at<uchar>(i,j)-centre1)>abs(imageC1.at<uchar>(i,j)-centre2))
+                    {
+                        imageC3.at<uchar>(i,j)=255;//image correspondant aux lymphocytes
+                        imageC2.at<uchar>(i,j)=0;//image correspondant a la fibrose
+                    }
+                    else
+                    {
+                        imageC3.at<uchar>(i,j)=255;//image correspondant aux lymphocytes
+                        imageC2.at<uchar>(i,j)=255;//image correspondant a la fibrose
+                    }
+                }
+             }
+          }
+        imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Lymphocytes.bmp", imageC3 );
+        imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Fibrose.bmp", imageC2 );
+
+
+       // imageC1.release();
+        cvReleaseImage(&image2);cvReleaseImage(&hls);
+
+        ////////////////////////////////////////////
+
 }
 
 void Fenetre::fonctionCarron()
@@ -1163,6 +3917,7 @@ void Fenetre::fonctionCarron()
         cvCvtColor(image2, hls, CV_BGR2HLS);
         cvtColor( image, imageC1, CV_BGR2GRAY );
         cvtColor( image, imageC2, CV_BGR2GRAY );
+        cvtColor( image, imageC3, CV_BGR2GRAY );
         double pi = 3.14159265358979323846;
         int i,j;
         CvScalar pixel;
@@ -1218,55 +3973,5 @@ void Fenetre::fonctionCarron()
              }
         }
         traitement = true;
-}
-
-void Fenetre::rotation90(Mat& image)
-{
-    Mat rotated_img(Size(image.rows, image.cols), image.type());
-    int i,j;
-   // Vec3b intensity;
-    for ( i=0; i<image.rows; i++)
-       {
-         for ( j=0; j<image.cols; j++)
-         {
-             rotated_img.at<Vec3b>((image.cols-1-j),i) = image.at<Vec3b>(i,j);
-
-         }
-       }
-    imwrite(fichierstd.c_str(), rotated_img);
-
-}
-
-void Fenetre::rotation180(Mat& image)
-{
-    Mat rotated_img(Size(image.cols, image.rows), image.type());
-    int i,j;
-   // Vec3b intensity;
-    for ( i=0; i<image.rows; i++)
-       {
-         for ( j=0; j<image.cols; j++)
-         {
-             rotated_img.at<Vec3b>((image.rows-1-i),(image.cols-1-j)) = image.at<Vec3b>(i, j);
-
-         }
-       }
-    imwrite(fichierstd.c_str(), rotated_img);
-
-}
-
-void Fenetre::rotationM90(Mat& image)
-{
-    Mat rotated_img(Size(image.rows, image.cols), image.type());
-    int i,j;
-   // Vec3b intensity;
-    for ( i=0; i<image.rows; i++)
-       {
-         for ( j=0; j<image.cols; j++)
-         {
-             rotated_img.at<Vec3b>(j,(image.rows-1-i)) = image.at<Vec3b>(i, j);
-
-         }
-       }
-    imwrite(fichierstd.c_str(), rotated_img);
 
 }
