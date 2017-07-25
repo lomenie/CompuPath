@@ -1,7 +1,6 @@
 #include "fonction.h"
 #include <QTextStream>
 double Teinte = 0;double Luminance = 0;double Saturation = 0;double Rouge = 0;double Vert = 0;double Bleu = 0;
-
 Mat image,imageC1,imageC2,imageC3,imageInt, imageExt,imageZone;
 string fichierstd;
 bool traitement = false;
@@ -14,7 +13,6 @@ vector<vector<int> > contour;
 int distanceExtFront=10;//distance pixels minimum entre le front et le bord de l'image
 int bandelette = 5;//taille bandelettes de 5 micro
 int nb=0;
-
 
 Fenetre::Fenetre() : QWidget()
 
@@ -59,7 +57,6 @@ Fenetre::Fenetre() : QWidget()
     bouton6->setFont(QFont("Comic Sans MS", 8, QFont::Bold, true));
     bouton6->setCursor(Qt::PointingHandCursor);
     //bouton7
-
     bouton7 = new QPushButton("Cytomine Patchs", this);
     bouton7->setGeometry(100, 660, 120, 30);
     bouton7->setToolTip("Texte d'aide");
@@ -83,7 +80,6 @@ Fenetre::Fenetre() : QWidget()
     bouton10->setToolTip("Texte d'aide");
     bouton10->setFont(QFont("Comic Sans MS", 8, QFont::Bold, true));
     bouton10->setCursor(Qt::PointingHandCursor);
-
 
     lcd = new QLCDNumber(this);
     lcd->setSegmentStyle(QLCDNumber::Flat);
@@ -163,10 +159,8 @@ Fenetre::Fenetre() : QWidget()
     onglets->addTab(page1, "Image Originale");
     onglets->addTab(page2, "Transformation Couleur");
     onglets->addTab(page3, "Objets Biologiques");
-
     onglets->addTab(page4, "Image Bandelettes");
     onglets->addTab(page6, "Courbe");
-
     /////////////////////////////////////////////////////////////////////////
 
     QObject::connect(bouton3, SIGNAL(clicked()), qApp, SLOT(quit()));
@@ -174,11 +168,9 @@ Fenetre::Fenetre() : QWidget()
     QObject::connect(bouton5, SIGNAL(clicked()), this, SLOT(selectionPixel()));
     QObject::connect(bouton10, SIGNAL(clicked()), this, SLOT(Annotation()));
     QObject::connect(bouton6, SIGNAL(clicked()), this, SLOT(selectionMarqueur()));
-
     QObject::connect(bouton7, SIGNAL(clicked()), this, SLOT(imageCytomineA1()));
     QObject::connect(bouton8, SIGNAL(clicked()), this, SLOT(imageCytomineA2()));
     QObject::connect(bouton9, SIGNAL(clicked()), this, SLOT(imageCytomineA3()));
-
     QObject::connect(slider, SIGNAL(valueChanged(int)), lcd,SLOT(display(int)));
     QObject::connect(bouton2, SIGNAL(clicked()), this,SLOT(courbes()));
     QObject::connect(bouton1, SIGNAL(clicked()), this,SLOT(seuillage()));
@@ -187,7 +179,6 @@ Fenetre::Fenetre() : QWidget()
 }
 //////////////////////////////////////////
 //////////////////////////////////////////
-
 
 void Fenetre::imageCytomineA1()
 {
@@ -1065,7 +1056,6 @@ void Fenetre::imageCytomineA2()
 
   ifstream fichier("/home/djiro/annotations/fichier.txt");//où le fichier texte est enregistré
 
-
        if(fichier)
        {
             while(getline(fichier, ligne))
@@ -1105,7 +1095,6 @@ void Fenetre::imageCytomineA2()
 
                         taille+=1;
                       }
-
                     fichier2.close();
 
                     /////////////////////////
@@ -3293,6 +3282,23 @@ void Fenetre::selectionPixel()//cette fonction permet la selection d'une couleur
         lcd6->display(Luminance);
         destroyWindow("Choix Pixel");
 
+        ///////////////////////////////////
+        ///////////////////////
+
+            const cv::Point *pts = (const cv::Point*) Mat(contour).data;
+                int npts = Mat(contour).rows;
+
+                std::cout << "Number of polygon vertices: " << npts << std::endl;
+
+                polylines(img, &pts,&npts, 1,
+                                true, 			// draw closed contour (i.e. joint end to start)
+                                Scalar(0,255,0),// colour RGB ordering (here = green)
+                                1, 		        // line thickness
+                                CV_AA, 0);
+                imwrite("imageOrig1.bmp",img);
+        /////////////////////////////
+        //////////////////////////////
+
 int choix =2;
 
         //////////////////////////////////////////////////////////
@@ -3326,7 +3332,8 @@ int choix =2;
 
                 medianBlur(imageC1,imageC2,5);
                 Canny(imageC2,imageC2,10,350);
-
+                bitwise_not ( imageC2, imageC2 );
+                threshold(imageC1, imageC3, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
   /*
               //contours
                 medianBlur(imageC1,imageC2,3);
@@ -3336,10 +3343,8 @@ int choix =2;
 
           //imshow( "canny", imageC2);
          imwrite( "canny.bmp", imageC2 );
-
          imwrite("Otsu.bmp",imageC3);
          page3->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/Otsu.bmp"));
-
          page3->setScaledContents(true);
          page3->adjustSize();
     }
@@ -3440,9 +3445,7 @@ void Fenetre::selectionMarqueur()//cette fonction permet le selection d'un marqu
 
         fonctionNicolasArmand();
 
-
         cout<< "Taille Image : "; cout<< imageC1.rows; cout << " "; cout << imageC1.cols <<endl;
-
 
         imwrite( "imageC1.bmp", imageC1 );
         page2->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/imageC1.bmp"));
@@ -3481,7 +3484,6 @@ void Fenetre::selectionMarqueur()//cette fonction permet le selection d'un marqu
        imwrite( "Otsu.bmp", imageC3 );
        page3->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/Otsu.bmp"));
        page3->setScaledContents(true);
-
        page3->adjustSize();*/
 
     }
@@ -3506,7 +3508,6 @@ void Fenetre::Traitement()
         {
             Teinte = 0;
         }
-
 
         //Teinte Jaune
         if (itemstd == "Jaune")
@@ -3609,7 +3610,6 @@ void Fenetre::seuillage()
            //noyaux
              medianBlur(imageseuil,imageC2,5);
              Canny(imageC2,imageC2,10,350);
-
              bitwise_not ( imageC2, imageC2 );
              threshold(imageC1, imageC3, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
 /*
@@ -3621,7 +3621,6 @@ void Fenetre::seuillage()
 
        //imshow( "canny", imageC2);
       imwrite( "canny.bmp", imageC2 );
-
       imwrite("Otsu", imageC3);
       page3->setPixmap(QPixmap("/home/djiro/build-Qt_teste-Sans_nom-Debug/canny.bmp"));
       page3->setScaledContents(true);
@@ -3657,7 +3656,6 @@ void Fenetre::courbes()
     if (traitement == true)
     {
         seuillage();
-
         nbCourbe += 1;
         vector<double> TabCourbe;
         //recuperer le nombre de pixels du marqueur par bandelette de 5um(15pixels)car 1mm = 3040pixels
@@ -3667,11 +3665,9 @@ void Fenetre::courbes()
              nbcols +=1;
              for (int i=0; i<imageC2.rows; i++)
              {
-
                 // if(imageC2.at<uchar>(i,j)==0)//Canny
                  if(imageC3.at<uchar>(i,j)==0)//Otsu
                 // if(imageC2.at<uchar>(i,j)==0 && imageC3.at<uchar>(i,j)==0)//Canny et Otsu
-
                  {
                      pixelMarq += 1;
                  }
@@ -3679,7 +3675,6 @@ void Fenetre::courbes()
              }
 
             // if (nbcols == 15)//si on a 15 cols == 5 um
-
                if (((j+1)%(3*bandelette))==0)//à chaque bandelette de 5 um créer cellule tableauCourbe et y insérer le nb objets biologique détecté
              {
                  TabCourbe.push_back(pixelMarq);//conserve nb pixels marqueurs
@@ -3691,8 +3686,6 @@ void Fenetre::courbes()
 
            }
 
-
-
          int x = -ceil((TabCourbe.size()-1)/2);
          ofstream fichier1("/home/djiro/annotations/fichierCourbe.txt");
          ofstream fichier2("/home/djiro/annotations/fichierCourbeX.txt");
@@ -3703,13 +3696,11 @@ void Fenetre::courbes()
              fichier1 << x; fichier1 << " "; fichier1 << TabCourbe[i] << endl;
              fichier2 << x << endl;
              fichier3 << TabCourbe[i] << endl;
-
              x += 1;
          }
 
          fichier1.close();fichier2.close();fichier3.close();
          system("python /home/djiro/spyder/djiro/client/examples/courbe.py");
-
          page4->setPixmap(QPixmap("/home/djiro/annotations/Courbe.png"));
          page4->setScaledContents(true);
          page4->adjustSize();
@@ -3744,7 +3735,6 @@ void Fenetre::mouseEvent(int evt, int x, int y, int flags, void* param)
 
             printf("%d %d HLS: %d, %d, %d\n",
                    x, y,2*hsv.val[0],hsv.val[1],hsv.val[2]);
-
     }
 }
 
@@ -3763,7 +3753,6 @@ void Fenetre::mouseAnnotation(int evt, int x, int y, int flags, void* param)
 }
 
 void Fenetre::fonctionNicolasArmand()
-
 {
     //traitement par teinte
         double maxC1,minC1,Teinte1,distance,e;
@@ -3828,7 +3817,6 @@ void Fenetre::fonctionNicolasArmand()
 
              }
         }
-
         traitement = true;
 
         imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/GrisArmand.bmp", imageC1 );
@@ -3856,8 +3844,8 @@ void Fenetre::fonctionNicolasArmand()
                     if (imageC1.at<uchar>(i,j) > centre3)
                     {
                         centre3 = imageC1.at<uchar>(i,j);
-                    
                     }
+
                 }
 
              }
@@ -3893,7 +3881,6 @@ void Fenetre::fonctionNicolasArmand()
           }
         imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Lymphocytes.bmp", imageC3 );
         imwrite( "/media/djiro/38A09B49A09B0D0E/PROGRAMME/Fibrose.bmp", imageC2 );
-
 
        // imageC1.release();
         cvReleaseImage(&image2);cvReleaseImage(&hls);
@@ -3973,5 +3960,4 @@ void Fenetre::fonctionCarron()
              }
         }
         traitement = true;
-
 }

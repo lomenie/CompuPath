@@ -19,17 +19,30 @@ class Fenetre : public QWidget
 public:
     Fenetre();
     static void mouseEvent(int evt, int x, int y, int flags, void* param);
-    static void fonctionNicolas();
+    static void mouseAnnotation(int evt, int x, int y, int flags, void* param);
+ //   static void fonctionNicolas();
     static void fonctionNicolasArmand();
     static void fonctionCarron();
+    static void rotationM90(Mat& image);
+    static void rotation90(Mat& image);
+    static void rotation180(Mat& image);
 
 public slots:
     void ouvrirDialogueChoisir();
     void fonctionPrincipale();
     void selectionPixel();
     void selectionMarqueur();
+    void Traitement();
+    void Annotation();
+    void imageCytomineA1();
+    void imageCytomineA2();
+    void imageCytomineA3();
+    void imageCytomineA4();
 //    void seuillage(bool cocher);
-    void seuillage(int seuil);
+//    void seuillage(int seuil);
+    void seuillage();
+    void courbes();
+
 
 private:
     QPushButton *choixFichier;
@@ -41,6 +54,10 @@ private:
     QPushButton *bouton4;
     QPushButton *bouton5;
     QPushButton *bouton6;
+    QPushButton *bouton7;
+    QPushButton *bouton8;
+    QPushButton *bouton9;
+    QPushButton *bouton10;
     QLCDNumber  *lcd;
     QLCDNumber  *lcd1;
     QLCDNumber  *lcd2;
@@ -63,6 +80,7 @@ private:
     QLabel      *page3;
     QLabel      *page4;
     QLabel      *page5;
+    QLabel      *page6;
 
     QString nomFichier;
     QString marqueur;
